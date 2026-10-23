@@ -238,7 +238,10 @@ function attModel(){
 const sumA=l=>(l||[]).reduce((s,x)=>s+(+x.a||0),0);
 const discOf=r=>(+r.discount||0)+sumA((r.subs||[]).filter(x=>x.k==='disc'));
 const freeOf=r=>(S.free||[]).filter(f=>f.clientId&&f.clientId===r.clientId&&f.month===r.month);
-const recTotal=r=>Math.max(0,pkgTotal(r)+sumA(r.adds)+freeOf(r).reduce((a,f)=>a+(+f.price||0),0)-sumA(r.subs)-(+r.discount||0));
+function dailyAds(){const o={};for(const d of Object.values(S.att||{}))(d.ads||[]).forEach(x=>{if(x.a&&+x.amt>0)(o[x.a]??=[]).push({amt:+x.amt,link:x.link||'',date:d.date})});return o}
+const adsOf=r=>r.month===S.month?(dailyAds()[r.clientId]||[]):[];
+const adsSum=r=>adsOf(r).reduce((a,x)=>a+x.amt,0);
+const recTotal=r=>Math.max(0,pkgTotal(r)+sumA(r.adds)+adsSum(r)+freeOf(r).reduce((a,f)=>a+(+f.price||0),0)-sumA(r.subs)-(+r.discount||0));
 const isFri=d=>new Date(d+'T12:00').getDay()===5;
 const DG_T=['تحسين','وضع لوجو','ديزاين','كيرزل','فيديو ايديت'],PS_T=['بوست','ستوري'];
 const isAds=x=>x.k?x.k==='ads':/إعلان/.test(x.d||'');
@@ -357,7 +360,7 @@ function compute(){
   for(const r of S.recs){
     const c=cli(r.clientId)?.name||r.clientName||'عميل',m=r.mgmt||{},ph=r.photo||{};
     const M=m.on?+m.price||0:0,Ph=photoOn(r)?+ph.price||0:0;
-    const adFee=(r.adds||[]).filter(isAds).reduce((a,x)=>a+(+x.a||0),0)*(+(F.adsPct??10))/100;
+    const adFee=((r.adds||[]).filter(isAds).reduce((a,x)=>a+(+x.a||0),0)+adsSum(r))*(+(F.adsPct??10))/100;
     revenue+=M+Ph+adFee;discounts+=discOf(r);if(r.status==='paid')collected+=M+Ph+adFee-discOf(r);
     if(M){const p={...F.mgmtPct,...(m.pct||{})},T=teamOf(r),segs=T.creator;
       segs.forEach((sg,i)=>{const from=Math.min(dim,Math.max(1,+sg.from||1)),to=i<segs.length-1?Math.min(dim,Math.max(from,(+segs[i+1].from||dim)-1)):dim,days=to-from+1;
@@ -699,7 +702,7 @@ function vAcc(){
     const r=S.recs.find(x=>x.clientId===c.id);
     const st=!r?'<span class="pill none">مش متسجّل الشهر ده</span>':r.status==='paid'?'<span class="pill paid">اتدفعت</span>':'<span class="pill unpaid">مستنية الدفع</span>';
     return `<div class="item"><div class="grow"><b>${h(c.name)}</b>${c.demo?'<span class="demo">مثال</span>':''}
-      <div class="row" style="gap:6px;margin-top:4px">${r?`<span class="pkg ${r.mgmt?.on?'on':''}">إدارة${r.mgmt?.on?' '+money(r.mgmt.price):''}</span><span class="pkg ${photoOn(r)?'on':''}">تصوير${photoOn(r)?' '+money(r.photo?.price):''}</span>${photoOn(r)&&!+r.photo?.price?'<span class="pill red">فيه تصوير · حدد سعر الباقة</span>':''}`:`<span class="small muted">اضغط «سجّل الشهر» وحدد الباقات والفريق</span>${dailyPhoto().sh[c.id]||dailyPhoto().ed[c.id]?'<span class="pill red">فيه تصوير الشهر ده</span>':''}`}</div></div>
+      <div class="row" style="gap:6px;margin-top:4px">${r?`<span class="pkg ${r.mgmt?.on?'on':''}">إدارة${r.mgmt?.on?' '+money(r.mgmt.price):''}</span><span class="pkg ${photoOn(r)?'on':''}">تصوير${photoOn(r)?' '+money(r.photo?.price):''}</span>${photoOn(r)&&!+r.photo?.price?'<span class="pill red">فيه تصوير · حدد سعر الباقة</span>':''}`:`<span class="small muted">اضغط «سجّل الشهر» وحدد الباقات والفريق</span>${dailyPhoto().sh[c.id]||dailyPhoto().ed[c.id]?'<span class="pill red">فيه تصوير الشهر ده</span>':''}${dailyAds()[c.id]?'<span class="pill red">فيه إعلانات ممولة</span>':''}`}</div></div>
      ${r?`<span class="amt">${egp(recTotal(r))}</span>`:''}${st}
      <div class="row"><button class="btn sm" data-act="editRec" data-c="${c.id}">${r?'تعديل':'سجّل الشهر'}</button>${r&&recTotal(r)?`<button class="btn sm primary" data-act="viewInv" data-id="${r.id}">الفاتورة</button>`:''}<button class="btn sm ghost" data-act="editClient" data-id="${c.id}" aria-label="بيانات العميل">⋯</button></div></div>`}).join('')}</div></div></div>`;
 }
@@ -725,7 +728,7 @@ function vAtt(){
   if(!S.attDraft||S.attDraft.date!==d){
     const D={date:d,mods:JSON.parse(JSON.stringify(day.mods||{}))};
     for(const[k,c]of Object.entries(EN)){D[k]=JSON.parse(JSON.stringify(day[k]||[]));if(!D[k].length&&c.auto)S.emps.filter(e=>has(e,c.auto)).forEach(e=>D[k].push({e:e.id,a:'',[c.f]:c.def??''}))}
-    S.emptyMods=!day.mods;S.attDraft=D;
+    D.ads=JSON.parse(JSON.stringify(day.ads||[]));S.emptyMods=!day.mods;S.attDraft=D;
   }
   const D=S.attDraft;
   if(!S.emps.length)return `<div class="panel empty"><h3>مفيش موظفين لسه</h3><p>${S.fin?'ضيف الفريق من تبويب «الفريق» الأول.':'الإدارة لسه ماضافتش الفريق.'}</p></div>`;
@@ -751,6 +754,12 @@ function vAtt(){
     ${off?`<div class="field"><label class="label" for="md_cv_${e.id}">مين غطّى مكانه؟</label><select id="md_cv_${e.id}" data-mod="${e.id}">${empOpts(x.cover,e.id)}</select></div>`:''}</div></div>`}).join('')||'<p class="small muted">مفيش موديريتور في الفريق.</p>'}</div></div>
   ${block('shoots',EN.shoots)}
   ${block('edits',EN.edits)}
+  <div class="panel"><h3>إعلانات ممولة النهارده</h3><p class="small muted" style="margin:4px 0 10px">العميل، ولينك البوست، والمبلغ. المبلغ بيتضاف على فاتورة العميل كإعلانات ممولة، والشركة ليها منه ${S.fin?(S.F.adsPct??10):10}%.</p>
+   <div class="lst">${(D.ads||[]).map((x,i)=>`<div class="r" style="flex-wrap:wrap"><select id="ad_cl_${i}" data-ad="a" data-i="${i}" aria-label="العميل" style="flex:1 1 140px"><option value="">العميل</option>${accs.map(cl=>`<option value="${cl.id}" ${x.a===cl.id?'selected':''}>${h(cl.name)}</option>`).join('')}</select>
+     <input id="ad_ln_${i}" data-ad="link" data-i="${i}" dir="ltr" value="${h(x.link||'')}" placeholder="لينك البوست" aria-label="لينك البوست" style="flex:2 1 200px">
+     <input id="ad_am_${i}" data-ad="amt" data-i="${i}" type="number" min="0" value="${x.amt??''}" placeholder="المبلغ" aria-label="المبلغ" style="flex:0 0 100px">
+     <button class="x" data-act="rmAd" data-i="${i}" aria-label="شيل">−</button></div>`).join('')}</div>
+   <button class="btn sm" data-act="addAd" style="margin-top:8px">+ إعلان ممول</button></div>
   <div><button class="btn primary" data-act="saveAtt">حفظ المتابعة اليومية</button></div>
   ${S.fin||S.tl?`<div class="row"><button class="btn sm ghost" data-act="tab" data-k="sum">ملخص الشهر كامل ←</button></div>`:''}</div>`;
 }
@@ -904,6 +913,7 @@ function invText(r){
   const c=cli(r.clientId),cfg=S.cfg;let t=`فاتورة ${cfg.company||'Pensell'}\nرقم الفاتورة: ${r.no}\nالعميل: ${c?.name||r.clientName}\nعن شهر: ${mName(r.month)}\n\n`;
   if(r.mgmt?.on)t+=`• باقة الإدارة${r.mgmt.desc?` (${r.mgmt.desc})`:''}: ${money(r.mgmt.price)} ج.م\n`;
   if(photoOn(r))t+=`• باقة التصوير${photoDesc(r)?` (${photoDesc(r)})`:''}: ${money(r.photo?.price)} ج.م\n`;
+  adsOf(r).forEach(x=>t+=`• إعلان ممول (${x.date.slice(8)}/${x.date.slice(5,7)}): ${money(x.amt)} ج.م${x.link?`\n   ${x.link}`:''}\n`);
   freeOf(r).forEach(f=>t+=`• ${f.desc||'شغل إضافي'}: ${money(f.price)} ج.م\n`);
   (r.adds||[]).filter(x=>+x.a).forEach(x=>t+=`• ${x.d||'إضافة'}: ${money(x.a)} ج.م\n`);
   if(+r.discount)t+=`• خصم: −${money(r.discount)} ج.م\n`;
@@ -974,9 +984,10 @@ function sheetView(id,refresh){
     <div class="tbl" style="margin-top:10px"><table><thead><tr><th>البند</th><th style="text-align:left">القيمة</th></tr></thead><tbody>
      ${r.mgmt?.on?`<tr><td>باقة الإدارة${r.mgmt.desc?`<div class="desc">${h(r.mgmt.desc)}</div>`:''}</td><td class="num" style="text-align:left">${money(r.mgmt.price)}</td></tr>`:''}
      ${photoOn(r)?`<tr><td>باقة التصوير${photoDesc(r)?`<div class="desc">${h(photoDesc(r))}</div>`:''}</td><td class="num" style="text-align:left">${money(r.photo?.price)}</td></tr>`:''}
+     ${adsOf(r).map(x=>`<tr><td>إعلان ممول · <span class="num">${x.date.slice(8)}/${x.date.slice(5,7)}</span>${x.link?`<div class="desc" dir="ltr" style="word-break:break-all;text-align:right">${h(x.link)}</div>`:''}</td><td class="num" style="text-align:left">${money(x.amt)}</td></tr>`).join('')}
      ${freeOf(r).map(f=>`<tr><td>${h(f.desc||'شغل إضافي')}</td><td class="num" style="text-align:left">${money(f.price)}</td></tr>`).join('')}
      ${(r.adds||[]).filter(x=>+x.a).map(x=>`<tr><td>${h(x.d||'إضافة')}</td><td class="num" style="text-align:left">${money(x.a)}</td></tr>`).join('')}
-     ${(r.subs||[]).some(x=>+x.a)||+r.discount?`<tr><td><b>الإجمالي</b></td><td class="num" style="text-align:left"><b>${money(pkgTotal(r)+sumA(r.adds)+freeOf(r).reduce((a,f)=>a+(+f.price||0),0))}</b></td></tr>`:''}
+     ${(r.subs||[]).some(x=>+x.a)||+r.discount?`<tr><td><b>الإجمالي</b></td><td class="num" style="text-align:left"><b>${money(pkgTotal(r)+sumA(r.adds)+adsSum(r)+freeOf(r).reduce((a,f)=>a+(+f.price||0),0))}</b></td></tr>`:''}
      ${+r.discount?`<tr><td>خصم</td><td class="num" style="text-align:left;color:#C0262C">−${money(r.discount)}</td></tr>`:''}
      ${(r.subs||[]).filter(x=>+x.a).map(x=>`<tr><td>${h(x.d||'خصم')}</td><td class="num" style="text-align:left;color:#C0262C">−${money(x.a)}</td></tr>`).join('')}</tbody></table></div>
     <div class="total"><span>المطلوب</span><b>${egp(recTotal(r))}</b></div>
@@ -1001,6 +1012,7 @@ document.addEventListener('input',e=>{
   if(t.dataset.ps){const x=S.attDraft.posts[+t.dataset.i];if(x)x[t.dataset.ps]=t.dataset.ps==='n'?(t.value===''?'':+t.value):t.value}
   if(t.dataset.en){const x=S.attDraft[t.dataset.en]?.[+t.dataset.i];if(x)x[t.dataset.f]=t.dataset.f==='n'?(t.value===''?'':+t.value):t.value}
   if(t.dataset.mod){(S.attDraft.mods[t.dataset.mod]??={s:'absent'}).cover=t.value||null}
+  if(t.dataset.ad){const x=S.attDraft.ads?.[+t.dataset.i];if(x)x[t.dataset.ad]=t.dataset.ad==='amt'?(t.value===''?'':+t.value):t.value}
 });
 document.addEventListener('change',e=>{
   const t=e.target;
@@ -1011,6 +1023,7 @@ document.addEventListener('change',e=>{
   if(t.dataset.ps){const x=S.attDraft.posts[+t.dataset.i];if(x)x[t.dataset.ps]=t.dataset.ps==='n'?(t.value===''?'':+t.value):t.value}
   if(t.dataset.en){const x=S.attDraft[t.dataset.en]?.[+t.dataset.i];if(x)x[t.dataset.f]=t.dataset.f==='n'?(t.value===''?'':+t.value):t.value}
   if(t.dataset.mod){(S.attDraft.mods[t.dataset.mod]??={s:'absent'}).cover=t.value||null}
+  if(t.dataset.ad){const x=S.attDraft.ads?.[+t.dataset.i];if(x)x[t.dataset.ad]=t.dataset.ad==='amt'?(t.value===''?'':+t.value):t.value}
   if(t.id==='w_file'&&t.files&&t.files[0]){const f=t.files[0];document.getElementById('w_prev').innerHTML='<span class="small muted">بيجهّز الصورة…</span>';shrinkImage(f).then(d=>{if(S.edit?.kind!=='work')return;S.edit.img=d;document.getElementById('w_prev').innerHTML=`<img src="${d}" alt="" style="max-height:220px;border-radius:10px">`}).catch(()=>toast('الصورة دي مش راضية تفتح، جرّب صورة تانية'));return}
   if(t.id==='fr_c'){document.getElementById('fr_pw').hidden=!t.value}
   if(t.dataset.dist){readDist(t.dataset.dist)}
@@ -1134,13 +1147,18 @@ document.addEventListener('click',async e=>{
   if(a==='addPs'){S.attDraft.posts.push({e:S.emps.find(x=>has(x,'creator'))?.id||S.emps[0]?.id,a:'',t:'بوست'});render();return}
   if(a==='rmPs'){S.attDraft.posts.splice(+b.dataset.i,1);render();return}
   if(a==='addEn'){const k=b.dataset.k,c=EN[k];S.attDraft[k].push({e:S.emps.find(x=>c.roles.some(r=>has(x,r)))?.id||S.emps[0]?.id,a:'',[c.f]:c.def??''});render();return}
+  if(a==='addAd'){S.attDraft.ads.push({a:'',link:'',amt:''});render();return}
+  if(a==='rmAd'){S.attDraft.ads.splice(+b.dataset.i,1);render();return}
   if(a==='rmEn'){S.attDraft[b.dataset.k].splice(+b.dataset.i,1);render();return}
   if(a==='modS'){const x=(S.attDraft.mods[b.dataset.e]??={});x.s=b.dataset.s;if(x.s!=='absent')x.cover=null;render();return}
   if(a==='saveAtt'){const D=S.attDraft;
     document.querySelectorAll('[data-en]').forEach(el=>{const x=D[el.dataset.en]?.[+el.dataset.i];if(x)x[el.dataset.f]=el.dataset.f==='n'?(el.value===''?'':+el.value):el.value});
     document.querySelectorAll('[data-mod]').forEach(el=>{(D.mods[el.dataset.mod]??={s:'absent'}).cover=el.value||null});
+    document.querySelectorAll('[data-ad]').forEach(el=>{const x=D.ads[+el.dataset.i];if(x)x[el.dataset.ad]=el.dataset.ad==='amt'?+el.value||0:el.value.trim()});
+    if(D.ads.some(x=>+x.amt>0&&!x.a))return toast('اختار العميل لكل إعلان');
     const body={date:S.attDate,rows:S.att[S.attDate]?.rows||{},mods:{}};
     S.emps.filter(e=>has(e,'moderator')).forEach(e=>{const x=D.mods[e.id]||{s:'done'};body.mods[e.id]={s:x.s||'done',cover:x.s==='absent'?(x.cover||null):null}});
+    body.ads=(D.ads||[]).filter(x=>x.a&&+x.amt>0).map(x=>({a:x.a,link:/^https?:\/\//i.test(x.link||'')||!x.link?x.link||'':'https://'+x.link,amt:+x.amt}));
     for(const[k,c]of Object.entries(EN))body[k]=(D[k]||[]).filter(x=>x.e&&x.a).map(x=>c.f==='t'?{e:x.e,a:x.a,t:x.t||c.def,n:1}:{e:x.e,a:x.a,n:k==='edits'?Math.max(1,+x.n||0):(+x.n||0)});
     if(await save(()=>db.doc('attendance/'+S.attDate).set(body),'المتابعة اتحفظت')){S.attDraft=null;document.activeElement?.blur();render()}return}
   if(a==='saveCfg'){const d={company:v('s_company'),vf:v('s_vf'),ip:v('s_ip'),ipLink:v('s_iplink'),note:v('s_note')};if(d.ipLink&&!/^https?:\/\//.test(d.ipLink))d.ipLink='https://'+d.ipLink;if(await save(()=>db.doc('cfg/settings').set(d,{merge:true}),'بيانات الدفع اتحفظت')){S.cfg={...S.cfg,...d};document.activeElement?.blur();render()}return}
