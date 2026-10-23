@@ -223,6 +223,7 @@ const discOf=r=>(+r.discount||0)+sumA((r.subs||[]).filter(x=>x.k==='disc'));
 const freeOf=r=>(S.free||[]).filter(f=>f.clientId&&f.clientId===r.clientId&&f.month===r.month);
 const recTotal=r=>Math.max(0,pkgTotal(r)+sumA(r.adds)+freeOf(r).reduce((a,f)=>a+(+f.price||0),0)-sumA(r.subs)-(+r.discount||0));
 const isFri=d=>new Date(d+'T12:00').getDay()===5;
+const DG_T=['تحسين','وضع لوجو','ديزاين','كيرزل','فيديو ايديت'],PS_T=['بوست','ستوري'];
 const isAds=x=>x.k?x.k==='ads':/إعلان/.test(x.d||'');
 const ADD_P=['إعلانات ممولة','متأخرات','مواصلات'],SUB_P=[['دفعة مقدمة','paid'],['مدفوع خلال الشهر','paid'],['خصم','disc']];
 function toast(t){const el=document.createElement('div');el.className='toast';el.textContent=t;document.body.appendChild(el);setTimeout(()=>el.remove(),2200)}
@@ -344,7 +345,7 @@ function compute(){
     if(M){const p={...F.mgmtPct,...(m.pct||{})},T=teamOf(r),segs=T.creator;
       segs.forEach((sg,i)=>{const from=Math.min(dim,Math.max(1,+sg.from||1)),to=i<segs.length-1?Math.min(dim,Math.max(from,(+segs[i+1].from||dim)-1)):dim,days=to-from+1;
         if(!emp(sg.e)||days<=0)return;const portion=M*p.creator/100*days/dim;inc(out.creatorDays,sg.e,days);
-        add(sg.e,portion,{type:'daily',role:'creator',client:c,share:portion,what:`كريتور · ${c}${segs.length>1?` · من يوم ${from} لـ ${to}`:''}`})});
+        add(sg.e,portion,{type:'daily',role:'creator',client:c,cid:r.clientId,share:portion,what:`كريتور · ${c}${segs.length>1?` · من يوم ${from} لـ ${to}`:''}`})});
       const ds=M*p.designer/100,dc=designs[r.clientId]||{},tot=Object.values(dc).reduce((a,b)=>a+b,0);
       if(tot){const earned=ds*Math.min(tot,tgt)/tgt;for(const[e,k]of Object.entries(dc)){inc(out.designs,e,k);add(e,earned*k/tot,{type:'design',role:'designer',client:c,n:k,tot,share:ds})}}
       else if(emp(T.designer))add(T.designer,0,{type:'design',role:'designer',client:c,n:0,tot:0,share:ds});
@@ -377,9 +378,29 @@ function compute(){
   // الغياب والتأخير: على الشغل اليومي (كريتور، ديزاينر، موديريتور، تيم ليدر)
   const lates={};
   for(const id of Object.keys(P)){
-    const el=P[id].lines.filter(l=>l.type==='daily'||l.type==='design').reduce((a,l)=>a+l.amt,0);if(el<=0)continue;const per=el/md,off=new Set();
-    for(const a of abs[id]||[]){off.add(a.date);add(id,-per,{type:'absence',date:a.date,s:a.s,cover:a.cover});if(a.cover)add(a.cover,per,{type:'cover',from:id,date:a.date})}
-    for(const[d,x]of Object.entries(S.checks?.[id]||{})){if(!d.startsWith(S.month)||off.has(d)||!x.in||x.in<=grace||isFri(d))continue;(lates[id]??=[]).push(d);add(id,-per*lf,{type:'late',date:d,t:x.in})}
+    const all=P[id].lines.filter(l=>l.type==='daily'||l.type==='design'),allEl=all.reduce((a,l)=>a+l.amt,0);if(allEl<=0)continue;
+    // الديزاينر مرتبه بعدد التصميمات، فالغياب مش بيتخصم من نصيب التصميم
+    const elig=all.filter(l=>l.type==='daily'),el=elig.reduce((a,l)=>a+l.amt,0),per=el/md,latePer=per,off=new Set();
+    const crL=elig.filter(l=>l.role==='creator'&&l.cid),crEl=crL.reduce((a,l)=>a+l.amt,0),restPer=(el-crEl)/md;
+    const myAbs=(abs[id]||[]).filter(a=>!isFri(a.date));
+    for(const a of myAbs){off.add(a.date);if(per<=0)continue;const covers=[];
+      // الكريتور: اللي نزّل بوستات على أكونتاته يوم الغياب بياخد نصيب اليوم بتاع الأكونت ده
+      for(const L of crL){const day=L.amt/md,ps=(S.att[a.date]?.posts||[]).filter(x=>x.a===L.cid&&x.e!==id&&emp(x.e)&&+x.n>0),tot=ps.reduce((q,x)=>q+(+x.n),0);
+        if(tot)ps.forEach(x=>{const amt=day*(+x.n)/tot;add(x.e,amt,{type:'cover',from:id,date:a.date,client:L.client});covers.push(x.e)})}
+      // باقي الشغل اليومي (موديريتور، ديزاينر): اللي التيم ليدر اختاره يغطي
+      if(restPer>0&&a.cover){add(a.cover,restPer,{type:'cover',from:id,date:a.date});covers.push(a.cover)}
+      add(id,-per,{type:'absence',date:a.date,s:a.s,covers:[...new Set(covers)]})}
+    // تعديل أيام الغياب من «ملخص الشهر»
+    const ov=(S.sumOv||{})[id]||{};
+    if(ov.absent!=null&&ov.absent!==''){const dlt=(+ov.absent)-myAbs.length;
+      if(dlt>0&&per>0)add(id,-per*dlt,{type:'sumadj',what:`غياب زيادة من ملخص الشهر (${dlt} يوم)`});
+      else if(dlt<0&&per>0)add(id,per*Math.min(-dlt,myAbs.length),{type:'sumadj',what:`غياب أقل من ملخص الشهر (${Math.min(-dlt,myAbs.length)} يوم)`})}
+    // تعديل عدد التصميمات من «ملخص الشهر»
+    const dL=P[id].lines.filter(l=>l.type==='design');
+    if(dL.length&&ov.designs!=null&&ov.designs!==''){const autoN=dL.reduce((a,l)=>a+(+l.n||0),0),dlt=(+ov.designs)-autoN;
+      if(dlt){const accs=[...new Map(dL.map(l=>[l.client,l.share])).values()],rate=accs.reduce((a,x)=>a+x,0)/(tgt*accs.length),cur=dL.reduce((a,l)=>a+l.amt,0),cap=accs.reduce((a,x)=>a+x,0);
+        const amt=Math.max(-cur,Math.min(cap-cur,dlt*rate));if(Math.abs(amt)>0.5)add(id,amt,{type:'sumadj',what:`${dlt>0?'تصميمات زيادة':'تصميمات أقل'} من ملخص الشهر (${Math.abs(dlt)})`})}}
+    for(const[d,x]of Object.entries(S.checks?.[id]||{})){if(latePer<=0||!d.startsWith(S.month)||off.has(d)||!x.in||x.in<=grace||isFri(d))continue;(lates[id]??=[]).push(d);add(id,-latePer*lf,{type:'late',date:d,t:x.in})}
   }
   const R=+F.roundTo||0;let payroll=0;
   for(const p of Object.values(P)){const raw=Math.max(0,Math.round(p.raw*100)/100);p.total=R&&raw>0?Math.ceil(raw/R)*R:Math.round(raw);p.round=p.total-p.raw;payroll+=p.total}
@@ -574,7 +595,7 @@ function monthSum(){
   const ses=C?C.out.sessions:(S.stats?.sessions||{}),vid=C?C.out.videos:(S.stats?.videos||{});
   for(const log of Object.values(S.checks||{}))for(const[d,x]of Object.entries(log))if(d.startsWith(m)&&x.in&&!isFri(d))days.add(d);
   for(const d of Object.keys(S.att))if(!isFri(d))days.add(d);
-  const des={},pst={};for(const dd of Object.values(S.att)){(dd.designs||[]).forEach(x=>des[x.e]=(des[x.e]||0)+(+x.n||0));(dd.posts||[]).forEach(x=>pst[x.e]=(pst[x.e]||0)+(+x.n||0))}
+  const des={},pst={},br={};for(const dd of Object.values(S.att)){(dd.designs||[]).forEach(x=>{des[x.e]=(des[x.e]||0)+(+x.n||1);const o=((br[x.e]??={}).designs??={});o[x.t||'ديزاين']=(o[x.t||'ديزاين']||0)+(+x.n||1)});(dd.posts||[]).forEach(x=>{pst[x.e]=(pst[x.e]||0)+(+x.n||1);const o=((br[x.e]??={}).posts??={});o[x.t||'بوست']=(o[x.t||'بوست']||0)+(+x.n||1)})}
   const out={};
   for(const e of S.emps.filter(e=>!isOwnerEmp(e))){
     let present=0,absent=0,hard=0,soft=0;
@@ -583,17 +604,17 @@ function monthSum(){
       if(x?.in||r?.s==='present'){present++;const k=lateKind(x?.in);if(k==='hard')hard++;else if(k==='soft')soft++}}
     const auto={present,absent,tasks:S.mTasks?.[e.id]?.done||0,designs:des[e.id]||0,posts:pst[e.id]||0,sessions:ses[e.id]||0,videos:vid[e.id]||0,other:0};
     const ov=(S.sumOv||{})[e.id]||{},eff={...auto};SUMF.forEach(([k])=>{if(ov[k]!=null&&ov[k]!=='')eff[k]=+ov[k]});
-    out[e.id]={e,auto,ov,eff,hard,soft,taskAll:S.mTasks?.[e.id]?.all||0};
+    out[e.id]={e,auto,ov,eff,hard,soft,taskAll:S.mTasks?.[e.id]?.all||0,br:br[e.id]||{}};
   }
   return{rows:out,days:days.size};
 }
 function vSum(){
   const M=monthSum(),list=Object.values(M.rows).sort((a,b)=>firstIdx(a.e)-firstIdx(b.e)),ed=!!S.sumEdit;
   return `<div class="stack"><div class="row between"><h2>ملخص ${mName(S.month)}</h2>${ed?`<div class="row"><button class="btn" data-act="sumCancel">إلغاء</button><button class="btn primary" data-act="sumSave">حفظ التعديلات</button></div>`:`<button class="btn" data-act="sumEdit">تعديل الأرقام</button>`}</div>
-  <p class="small muted" style="margin:0">الأرقام بتتحسب لوحدها من البصمة والمتابعة اليومية والمهام وباقات التصوير. تقدر تعدّلها آخر الشهر، والرقم المتعدّل عليه <span style="color:var(--accent)">●</span>. الأرقام دي هي اللي بتدخل في تقييم نجم الشهر. تعديلها مش بيغيّر المرتبات: المرتب بيتحسب من المتابعة اليومية نفسها.</p>
+  <p class="small muted" style="margin:0">الأرقام بتتحسب لوحدها من البصمة والمتابعة اليومية والمهام وباقات التصوير. تقدر تعدّلها آخر الشهر، والرقم المتعدّل عليه <span style="color:var(--accent)">●</span>. الأرقام دي بتدخل في تقييم نجم الشهر. وتعديل «الغياب» و«التصميمات» بيغيّر المرتب كمان. الجلسات والفيديوهات بتتعدّل من باقة التصوير في الأكونت نفسه.</p>
   <div class="panel tbl"><table><thead><tr><th>الموظف</th>${SUMF.map(([,nm])=>`<th>${nm}</th>`).join('')}${ed?'<th>ملاحظة</th>':''}</tr></thead><tbody>
   ${list.map(x=>`<tr><td><b>${h(x.e.name)}</b><div class="small muted">${h(rolesTxt(x.e))}${x.hard?` · اتأخر ${x.hard}`:''}</div>${!ed&&x.ov.note?`<div class="small" style="color:var(--gold)">${h(x.ov.note)}</div>`:''}</td>
-   ${SUMF.map(([k])=>ed?`<td><input id="sm_${x.e.id}_${k}" type="number" min="0" value="${x.eff[k]}" style="width:64px" aria-label="${k}"></td>`:`<td class="num">${x.eff[k]}${k==='tasks'&&x.taskAll?`<span class="small muted">/${x.taskAll}</span>`:''}${x.ov[k]!=null&&x.ov[k]!==''&&+x.ov[k]!==x.auto[k]?' <span style="color:var(--accent)" title="متعدّل، المحسوب '+x.auto[k]+'">●</span>':''}</td>`).join('')}
+   ${SUMF.map(([k])=>ed?`<td><input id="sm_${x.e.id}_${k}" type="number" min="0" value="${x.eff[k]}" style="width:64px" aria-label="${k}"></td>`:`<td class="num">${x.eff[k]}${k==='tasks'&&x.taskAll?`<span class="small muted">/${x.taskAll}</span>`:''}${(k==='designs'||k==='posts')&&x.br[k]&&Object.keys(x.br[k]).length>1?`<div class="small muted" style="white-space:nowrap">${Object.entries(x.br[k]).map(([t,c])=>c+' '+t).join(' · ')}</div>`:''}${x.ov[k]!=null&&x.ov[k]!==''&&+x.ov[k]!==x.auto[k]?' <span style="color:var(--accent)" title="متعدّل، المحسوب '+x.auto[k]+'">●</span>':''}</td>`).join('')}
    ${ed?`<td><input id="sm_${x.e.id}_note" value="${h(x.ov.note||'')}" placeholder="سبب التعديل" style="min-width:140px"></td>`:''}</tr>`).join('')}</tbody></table></div></div>`;
 }
 function starRank(){
@@ -681,10 +702,10 @@ function vAtt(){
   const d=S.attDate,day=S.att[d]||{};
   if(!S.attDraft||S.attDraft.date!==d){
     const des=JSON.parse(JSON.stringify(day.designs||[]));
-    if(!des.length)S.emps.filter(e=>has(e,'designer')).forEach(e=>des.push({e:e.id,a:'',n:''}));
+    if(!des.length)S.emps.filter(e=>has(e,'designer')).forEach(e=>des.push({e:e.id,a:'',t:'ديزاين'}));
     const rows=JSON.parse(JSON.stringify(day.rows||{}));
     if(!day.rows&&d<=today()&&!isFri(d)){const any=Object.values(S.checks||{}).some(o=>o[d]?.in);if(any)S.emps.filter(e=>rolesOf(e).some(k=>DAILY.includes(k))).forEach(e=>rows[e.id]={s:S.checks[e.id]?.[d]?.in?'present':'absent'})}
-    const pst=JSON.parse(JSON.stringify(day.posts||[]));if(!pst.length)S.emps.filter(e=>has(e,'creator')).forEach(e=>pst.push({e:e.id,a:'',n:''}));
+    const pst=JSON.parse(JSON.stringify(day.posts||[]));if(!pst.length)S.emps.filter(e=>has(e,'creator')).forEach(e=>pst.push({e:e.id,a:'',t:'بوست'}));
     S.attDraft={date:d,rows,designs:des,posts:pst};
   }
   const D=S.attDraft,dailyEmps=S.emps.filter(e=>rolesOf(e).some(k=>DAILY.includes(k))),designers=S.emps.filter(e=>has(e,'designer'));
@@ -696,27 +717,27 @@ function vAtt(){
   return `<div class="stack">
   <div class="row between"><h2>المتابعة اليومية</h2><div class="row"><input type="date" id="attDate" value="${d}" style="width:auto"><span class="pill ${saved?'paid':'none'}">${saved?'متسجّل':'لسه ماتسجّلش'}</span></div></div>
   ${isFri(d)?'<div class="notice">الجمعة إجازة: مفيش بصمة ولا حضور، ومش بيتحسب غياب أو تأخير.</div>':vPunches(d)}
-  <div class="panel"><h3>الحضور والتغطية</h3><p class="small muted" style="margin:4px 0 0">الكريتور والديزاينر والموديريتور والتيم ليدر: يوم الغياب بيتخصم منه 1/30 من مرتبه، ولو حد غطّى مكانه بياخد المبلغ ده. أي حد من التيم ينفع يغطي.</p>
+  <div class="panel"><h3>الحضور</h3><p class="small muted" style="margin:4px 0 0">يوم الغياب بيتخصم 1/30 من الشغل اليومي. الكريتور: اللي ينزّل بوستات على أكونتاته يوم غيابه (كريتور تاني أو التيم ليدر) بياخد نصيب اليوم. الموديريتور: اختار مين غطّى مكانه. الديزاينر: مرتبه بعدد التصميمات، واللي يعمل تصميم مكانه يتسجّل باسمه تحت.</p>
    <div class="list">${dailyEmps.map(e=>{const r=D.rows[e.id]||{s:'present'},off=r.s!=='present';
    return `<div class="item" style="align-items:flex-start"><div style="flex:0 0 150px"><b>${h(e.name)}</b><div class="small muted">${h(rolesOf(e).filter(k=>DAILY.includes(k)).map(k=>ROLES[k]).join(' · '))}</div>${punch(e.id,d)}</div>
     <div class="stack grow" style="gap:8px">
      <div class="seg">${[['present','حاضر','p'],['absent','غياب','a'],['leave','إجازة','a']].map(([k,nm,c])=>`<button class="${r.s===k?'on '+c:''}" data-act="attS" data-e="${e.id}" data-s="${k}">${nm}</button>`).join('')}</div>
-     ${off?`<div class="field"><label class="label" for="cv_${e.id}">مين غطّى مكانه؟</label><select id="cv_${e.id}" data-att="cover" data-e="${e.id}">${empOpts(r.cover,e.id)}</select></div>`:''}
-     <textarea id="wk_${e.id}" data-att="work" data-e="${e.id}" rows="1" placeholder="${off?'ملاحظة':'عمل إيه النهارده بالظبط؟'}">${h(r.work||'')}</textarea>
+     ${off&&has(e,'moderator')?`<div class="field"><label class="label" for="cv_${e.id}">مين غطّى مكانه؟</label><select id="cv_${e.id}" data-att="cover" data-e="${e.id}">${empOpts(r.cover,e.id)}</select></div>`:''}
+     ${off&&has(e,'designer')&&!has(e,'creator')?'<div class="small muted">التصميمات اللي تتعمل مكانه سجّلها باسم اللي عملها في «تصميمات النهارده».</div>':''}
+     ${off&&has(e,'creator')?'<div class="small muted">اللي هينزّل بوستات على أكونتاته النهارده تحت في «بوستات النهارده» هو اللي هياخد اليوم.</div>':''}
     </div></div>`}).join('')||'<p class="small muted">مفيش موظفين شغلهم يومي في الفريق.</p>'}</div></div>
-  <div class="panel"><h3>تصميمات النهارده</h3><p class="small muted" style="margin:4px 0 10px">سجّل كل تصميم اتعمل لأنهي أكونت. الديزاينر ياخد نسبته كاملة لما يوصل ${S.fin?S.F.designTarget:8} تصميمات للأكونت في الشهر. لو حد غطّى، سجّل التصميم باسم اللي عمله.</p>
+  <div class="panel"><h3>تصميمات النهارده</h3><p class="small muted" style="margin:4px 0 10px">كل سطر = تصميم واحد. اختار مين عمله والأكونت والنوع (تحسين، وضع لوجو، ديزاين، كيرزل، فيديو ايديت). الديزاينر ياخد نسبته كاملة لما يوصل ${S.fin?S.F.designTarget:8} تصميمات للأكونت في الشهر. لو حد غطّى، سجّل التصميم باسم اللي عمله.</p>
    <div class="lst">${D.designs.map((x,i)=>`<div class="r"><select id="dg_e_${i}" data-dg="e" data-i="${i}" aria-label="الديزاينر">${S.emps.map(e=>`<option value="${e.id}" ${x.e===e.id?'selected':''}>${h(e.name)}</option>`).join('')}</select>
      <select id="dg_a_${i}" data-dg="a" data-i="${i}" aria-label="الأكونت"><option value="">اختار الأكونت</option>${accs.map(c=>`<option value="${c.id}" ${x.a===c.id?'selected':''}>${h(c.name)}</option>`).join('')}</select>
-     <input id="dg_n_${i}" data-dg="n" data-i="${i}" type="number" min="0" placeholder="عدد" value="${x.n??''}" aria-label="عدد التصميمات"><button class="x" data-act="rmDg" data-i="${i}" aria-label="شيل">−</button></div>`).join('')}</div>
-   <button class="btn sm" data-act="addDg" style="margin-top:8px">+ تصميمات لأكونت</button></div>
-  <div class="panel"><h3>بوستات النهارده</h3><p class="small muted" style="margin:4px 0 10px">للكريتور: اختار الكريتور والأكونت وعدد البوستات اللي نزلت النهارده.</p>
-   <div class="lst">${(D.posts||[]).map((x,i)=>`<div class="r"><select id="ps_e_${i}" data-ps="e" data-i="${i}" aria-label="الكريتور">${[...S.emps.filter(e=>has(e,'creator')),...S.emps.filter(e=>!has(e,'creator'))].map(e=>`<option value="${e.id}" ${x.e===e.id?'selected':''}>${h(e.name)}</option>`).join('')}</select>
+     <select id="dg_t_${i}" data-dg="t" data-i="${i}" aria-label="نوع التصميم" style="flex:0 0 120px">${DG_T.map(o=>`<option ${(x.t||'ديزاين')===o?'selected':''}>${o}</option>`).join('')}</select><button class="x" data-act="rmDg" data-i="${i}" aria-label="شيل">−</button></div>`).join('')}</div>
+   <button class="btn sm" data-act="addDg" style="margin-top:8px">+ تصميم تاني</button></div>
+  <div class="panel"><h3>بوستات النهارده</h3><p class="small muted" style="margin:4px 0 10px">كل سطر = بوست أو ستوري واحد. اختار مين نزّله والأكونت والنوع. لو كريتور غايب، سجّل البوستات باسم اللي نزّلها مكانه (كريتور تاني أو التيم ليدر) وهو اللي هياخد نصيب اليوم.</p>
+   <div class="lst">${(D.posts||[]).map((x,i)=>`<div class="r"><select id="ps_e_${i}" data-ps="e" data-i="${i}" aria-label="الكريتور">${[...S.emps.filter(e=>has(e,'creator')||has(e,'teamleader')),...S.emps.filter(e=>!has(e,'creator')&&!has(e,'teamleader'))].map(e=>`<option value="${e.id}" ${x.e===e.id?'selected':''}>${h(e.name)}</option>`).join('')}</select>
      <select id="ps_a_${i}" data-ps="a" data-i="${i}" aria-label="الأكونت"><option value="">اختار الأكونت</option>${accs.map(c=>`<option value="${c.id}" ${x.a===c.id?'selected':''}>${h(c.name)}</option>`).join('')}</select>
-     <input id="ps_n_${i}" data-ps="n" data-i="${i}" type="number" min="0" placeholder="عدد" value="${x.n??''}" aria-label="عدد البوستات"><button class="x" data-act="rmPs" data-i="${i}" aria-label="شيل">−</button></div>`).join('')}</div>
-   <button class="btn sm" data-act="addPs" style="margin-top:8px">+ بوستات لأكونت</button></div>
+     <select id="ps_t_${i}" data-ps="t" data-i="${i}" aria-label="النوع" style="flex:0 0 100px">${PS_T.map(o=>`<option ${(x.t||'بوست')===o?'selected':''}>${o}</option>`).join('')}</select><button class="x" data-act="rmPs" data-i="${i}" aria-label="شيل">−</button></div>`).join('')}</div>
+   <button class="btn sm" data-act="addPs" style="margin-top:8px">+ بوست / ستوري تاني</button></div>
   <div><button class="btn primary" data-act="saveAtt">حفظ المتابعة اليومية</button></div>
-  <div class="panel"><h3>ملخص ${mName(d.slice(0,7))}</h3><div class="tbl" style="margin-top:8px"><table><thead><tr><th>الموظف</th><th>حضور</th><th>غياب/إجازة</th><th>غطّى مكان حد</th><th>تصميمات</th></tr></thead><tbody>
-   ${[...new Set([...dailyEmps,...designers])].map(e=>{const s=sum[e.id]||{p:0,a:0,c:0,d:0};return `<tr><td>${h(e.name)}</td><td class="num">${s.p}</td><td class="num">${s.a}</td><td class="num">${s.c}</td><td class="num">${s.d}</td></tr>`}).join('')}</tbody></table></div></div></div>`;
+  ${S.fin||S.tl?`<div class="row"><button class="btn sm ghost" data-act="tab" data-k="sum">ملخص الشهر كامل ←</button></div>`:''}</div>`;
 }
 function vPay(){
   const C=compute();
@@ -730,7 +751,8 @@ function vPay(){
    const covers={};p.lines.filter(l=>l.type==='cover').forEach(c=>{const k=c.date+c.from;(covers[k]??={...c,amt:0});covers[k].amt+=c.amt});
    const rows=p.lines.filter(l=>l.type!=='cover').map(l=>{
      if(l.type==='daily')return `<tr><td>${h(l.what)}</td><td class="num">${money(l.share)}</td><td>—</td><td class="num">${money(l.amt)}</td></tr>`;
-     if(l.type==='absence')return `<tr><td>${l.s==='leave'?'إجازة':'غياب'} يوم <span class="num">${l.date.slice(8)}/${l.date.slice(5,7)}</span>${l.cover?`<div class="small muted">غطّى مكانه ${h(emp(l.cover)?.name||'')}</div>`:''}</td><td></td><td class="num minus">−${money(-l.amt)}</td><td class="num minus">−${money(-l.amt)}</td></tr>`;
+     if(l.type==='sumadj')return `<tr><td>${h(l.what)}</td><td></td><td class="num ${l.amt<0?'minus':''}">${l.amt<0?'−'+money(-l.amt):'—'}</td><td class="num ${l.amt<0?'minus':'plus'}">${l.amt<0?'−':'+'}${money(Math.abs(l.amt))}</td></tr>`;
+     if(l.type==='absence')return `<tr><td>${l.s==='leave'?'إجازة':'غياب'} يوم <span class="num">${l.date.slice(8)}/${l.date.slice(5,7)}</span>${(l.covers||[]).length?`<div class="small muted">غطّى مكانه ${h(l.covers.map(x=>emp(x)?.name||'').join('، '))}</div>`:''}</td><td></td><td class="num minus">−${money(-l.amt)}</td><td class="num minus">−${money(-l.amt)}</td></tr>`;
      if(l.type==='late')return `<tr><td>تأخير يوم <span class="num">${l.date.slice(8)}/${l.date.slice(5,7)}</span><div class="small muted">حضر <span class="num">${l.t}</span> · خصم ${C.lf*100}% من يوم</div></td><td></td><td class="num minus">−${money(-l.amt)}</td><td class="num minus">−${money(-l.amt)}</td></tr>`;
      if(l.type==='design')return `<tr><td>تصميم · ${h(l.client)}<div class="small muted">${l.n} تصميم${l.tot!==l.n?` من ${l.tot}`:''} · التارجت ${C.tgt}</div></td><td class="num">${money(l.share)}</td><td class="num minus">${l.amt<l.share?'−'+money(l.share-l.amt):'—'}</td><td class="num">${money(l.amt)}</td></tr>`;
      return `<tr><td>${h(l.what)}</td><td class="num">${money(l.amt)}</td><td>—</td><td class="num">${money(l.amt)}</td></tr>`}).join('');
@@ -778,7 +800,7 @@ function vSet(){
     <div class="field"><label class="label" for="s_grace">السماحية لحد</label><input id="s_grace" type="time" value="${h(GRACE())}"></div>
     <div class="field"><label class="label" for="s_lf">خصم التأخير بعد السماحية (من يوم)</label><select id="s_lf">${[[0.25,'ربع يوم'],[0.5,'نص يوم'],[1,'يوم كامل'],[0,'من غير خصم']].map(([x,nm])=>`<option value="${x}" ${+(F.lateFrac??0.25)===x?'selected':''}>${nm}</option>`).join('')}</select></div>
    </div>
-   <p class="small muted" style="margin:0">بين ميعاد الحضور والسماحية: التأخير بيتسجّل كملاحظة بس. بعد السماحية: بيتخصم من الشغل اليومي (كريتور، ديزاينر، موديريتور، تيم ليدر).</p>
+   <p class="small muted" style="margin:0">بين ميعاد الحضور والسماحية: التأخير بيتسجّل كملاحظة بس. بعد السماحية: بيتخصم من الشغل اليومي (كريتور، موديريتور، تيم ليدر). الديزاينر مرتبه بالتصميمات فمفيش عليه خصم غياب أو تأخير.</p>
    <div><button class="btn primary" data-act="saveTimes">حفظ المواعيد</button></div></div>
   <div class="panel stack"><h3>الصلاحيات</h3>
    <p class="small" style="margin:0">كل الموظفين بيدخلوا بإيميل جوجل. الموظف اللي إيميله متسجّل في «الفريق» بيشوف صفحة البصمة بتاعته بس.</p>
@@ -894,6 +916,7 @@ function slipRows(C,id){
     if(l.type==='cover'){const k=l.from;(cov[k]??={n:0,amt:0,from:l.from});cov[k].n++;cov[k].amt+=l.amt;continue}
     if(l.type==='design'){rows.push({t:`تصميم · ${l.client} (${l.n} تصميم من ${C.tgt})`,a:l.amt});continue}
     if(l.type==='absence'){rows.push({t:`${l.s==='leave'?'إجازة':'غياب'} يوم ${dd(l.date)}`,a:l.amt});continue}
+    if(l.type==='sumadj'){rows.push({t:l.what,a:l.amt});continue}
     if(l.type==='late'){rows.push({t:`تأخير يوم ${dd(l.date)} (${l.t})`,a:l.amt});continue}
     rows.push({t:l.what,a:l.amt});
   }
@@ -1086,17 +1109,15 @@ document.addEventListener('click',async e=>{
   if(a==='delNo'){document.getElementById('delZone').innerHTML='';return}
   if(a==='delYes'){const w=b.dataset.what,ref=w==='free'?db.doc('fin/main/freelance/'+S.edit.id):w==='svc'?db.doc('site/main/services/'+S.edit.id):w==='work'?db.doc('site/main/works/'+S.edit.id):w==='client'?db.doc('clients/'+S.edit.id):w==='emp'?db.doc('employees/'+S.edit.id):db.doc('fin/main').collection('invoices').doc(S.edit.id);if(await save(()=>ref.delete(),'اتمسح'))closeSheet();return}
   if(a==='attS'){const r=(S.attDraft.rows[b.dataset.e]??={s:'present'});r.s=b.dataset.s;if(r.s==='present')r.cover=null;render();return}
-  if(a==='addDg'){S.attDraft.designs.push({e:S.emps.find(x=>has(x,'designer'))?.id||S.emps[0]?.id,a:'',n:''});render();return}
+  if(a==='addDg'){S.attDraft.designs.push({e:S.emps.find(x=>has(x,'designer'))?.id||S.emps[0]?.id,a:'',t:'ديزاين'});render();return}
   if(a==='rmDg'){S.attDraft.designs.splice(+b.dataset.i,1);render();return}
-  if(a==='addPs'){S.attDraft.posts.push({e:S.emps.find(x=>has(x,'creator'))?.id||S.emps[0]?.id,a:'',n:''});render();return}
+  if(a==='addPs'){S.attDraft.posts.push({e:S.emps.find(x=>has(x,'creator'))?.id||S.emps[0]?.id,a:'',t:'بوست'});render();return}
   if(a==='rmPs'){S.attDraft.posts.splice(+b.dataset.i,1);render();return}
   if(a==='saveAtt'){const D=S.attDraft;document.querySelectorAll('[data-att]').forEach(el=>(D.rows[el.dataset.e]??={s:'present'})[el.dataset.att]=el.value||null);
-    document.querySelectorAll('[data-dg]').forEach(el=>{const x=D.designs[+el.dataset.i];if(x)x[el.dataset.dg]=el.dataset.dg==='n'?+el.value||0:el.value});
+    document.querySelectorAll('[data-dg]').forEach(el=>{const x=D.designs[+el.dataset.i];if(x)x[el.dataset.dg]=el.value});
     const rows={};S.emps.filter(e=>rolesOf(e).some(k=>DAILY.includes(k))).forEach(e=>{const r=D.rows[e.id]||{s:'present'};rows[e.id]={s:r.s||'present',work:r.work||'',cover:r.s!=='present'?(r.cover||null):null}});
-    document.querySelectorAll('[data-ps]').forEach(el=>{const x=D.posts[+el.dataset.i];if(x)x[el.dataset.ps]=el.dataset.ps==='n'?+el.value||0:el.value});
-    const designs=D.designs.filter(x=>x.e&&x.a&&+x.n>0).map(x=>({e:x.e,a:x.a,n:+x.n})),posts=(D.posts||[]).filter(x=>x.e&&x.a&&+x.n>0).map(x=>({e:x.e,a:x.a,n:+x.n}));
-    if((D.posts||[]).some(x=>+x.n>0&&!x.a))return toast('اختار الأكونت لكل بوستات');
-    if(D.designs.some(x=>+x.n>0&&!x.a))return toast('اختار الأكونت لكل تصميمات');
+    document.querySelectorAll('[data-ps]').forEach(el=>{const x=D.posts[+el.dataset.i];if(x)x[el.dataset.ps]=el.value});
+    const designs=D.designs.filter(x=>x.e&&x.a).map(x=>({e:x.e,a:x.a,t:x.t||'ديزاين',n:1})),posts=(D.posts||[]).filter(x=>x.e&&x.a).map(x=>({e:x.e,a:x.a,t:x.t||'بوست',n:1}));
     const prev=S.att[S.attDate];const body={date:S.attDate,rows,designs,posts};if(prev?.demo)body.demo=true;
     if(await save(()=>db.doc('attendance/'+S.attDate).set(body),'المتابعة اتحفظت')){S.attDraft=null;document.activeElement?.blur();render()}return}
   if(a==='saveCfg'){const d={company:v('s_company'),vf:v('s_vf'),ip:v('s_ip'),ipLink:v('s_iplink'),note:v('s_note')};if(d.ipLink&&!/^https?:\/\//.test(d.ipLink))d.ipLink='https://'+d.ipLink;if(await save(()=>db.doc('cfg/settings').set(d,{merge:true}),'بيانات الدفع اتحفظت')){S.cfg={...S.cfg,...d};document.activeElement?.blur();render()}return}
