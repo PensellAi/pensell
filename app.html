@@ -217,7 +217,24 @@ function teamOf(r){const a=S.asg?.[r.clientId],t=r.mgmt?.team||{};
   return{creator:a?.creator?.length?a.creator:(t.creator?[{e:t.creator,from:1}]:[]),designer:a?a.designer:t.designer,moderator:a?a.moderator:t.moderator}}
 function pSel(id,role,val,extra=''){const pref=S.emps.filter(e=>has(e,role)),rest=S.emps.filter(e=>!has(e,role));
   return `<select id="${id}" ${extra}><option value="">—</option>${pref.map(e=>`<option value="${e.id}" ${val===e.id?'selected':''}>${h(e.name)}</option>`).join('')}${rest.length?`<optgroup label="باقي الفريق">${rest.map(e=>`<option value="${e.id}" ${val===e.id?'selected':''}>${h(e.name)} — ${h(rolesTxt(e))}</option>`).join('')}</optgroup>`:''}</select>`}
-const pkgTotal=r=>(r.mgmt?.on?+r.mgmt.price||0:0)+(r.photo?.on?+r.photo.price||0:0);
+function dailyPhoto(){const sh={},ed={};for(const d of Object.values(S.att||{})){(d.shoots||[]).forEach(x=>{if(x.e&&x.a)(sh[x.a]??=[]).push({e:x.e,reels:+x.n||0,date:d.date})});(d.edits||[]).forEach(x=>{if(x.e&&x.a)(ed[x.a]??=[]).push({e:x.e,v:+x.n||0,date:d.date})})}return{sh,ed}}
+const photoOn=r=>!!(r.photo?.on||(r.month===S.month&&(dailyPhoto().sh[r.clientId]||dailyPhoto().ed[r.clientId])));
+const photoDesc=r=>{if(r.photo?.desc)return r.photo.desc;const D=dailyPhoto(),sh=D.sh[r.clientId]||[],ed=D.ed[r.clientId]||[],re=sh.reduce((a,x)=>a+x.reels,0),vi=ed.reduce((a,x)=>a+x.v,0);return [sh.length?sh.length+' جلسة تصوير':'',re?re+' ريل':'',vi?vi+' فيديو':''].filter(Boolean).join(' · ')};
+const pkgTotal=r=>(r.mgmt?.on?+r.mgmt.price||0:0)+(photoOn(r)?+r.photo?.price||0:0);
+/* الحضور: من البصمة + الموديريشن + أي شغل اتسجّل في المتابعة اليومية */
+function attModel(){
+  const m=S.month,td=today(),work=new Set(),pres={},abs={};const P=(id,d)=>(pres[id]??=new Set()).add(d);
+  for(const log of Object.values(S.checks||{}))for(const[d,x]of Object.entries(log))if(d.startsWith(m)&&x.in&&!isFri(d))work.add(d);
+  for(const[id,log]of Object.entries(S.checks||{}))for(const[d,x]of Object.entries(log))if(d.startsWith(m)&&x.in&&!isFri(d))P(id,d);
+  for(const dd of Object.values(S.att||{})){if(isFri(dd.date))continue;
+    ['posts','designs','shoots','edits'].forEach(k=>(dd[k]||[]).forEach(x=>{if(x.e&&x.a){P(x.e,dd.date);work.add(dd.date)}}));
+    for(const[id,x]of Object.entries(dd.mods||{})){work.add(dd.date);if(x.s==='absent')(abs[id]??=[]).push({date:dd.date,s:'absent',cover:x.cover&&x.cover!==id&&emp(x.cover)?x.cover:null});else P(id,dd.date)}
+    for(const[id,r]of Object.entries(dd.rows||{})){if(r.s==='absent'||r.s==='leave'){if(!(abs[id]||[]).some(a=>a.date===dd.date))(abs[id]??=[]).push({date:dd.date,s:r.s,cover:r.cover&&r.cover!==id&&emp(r.cover)?r.cover:null})}else if(r.s==='present')P(id,dd.date)}}
+  // اللي بيستخدم البصمة: أي يوم شغل عدّى ومابصمش ولا اتسجّل له شغل = غياب
+  for(const e of S.emps){const usesCheckin=Object.keys(S.checks?.[e.id]||{}).some(d=>d.startsWith(m));if(!usesCheckin)continue;
+    for(const d of work){if(d>=td||pres[e.id]?.has(d)||(abs[e.id]||[]).some(a=>a.date===d))continue;(abs[e.id]??=[]).push({date:d,s:'absent',cover:null})}}
+  return{work,pres,abs};
+}
 const sumA=l=>(l||[]).reduce((s,x)=>s+(+x.a||0),0);
 const discOf=r=>(+r.discount||0)+sumA((r.subs||[]).filter(x=>x.k==='disc'));
 const freeOf=r=>(S.free||[]).filter(f=>f.clientId&&f.clientId===r.clientId&&f.month===r.month);
@@ -331,15 +348,15 @@ function compute(){
   const add=(id,amt,line)=>{if(isExt(id)){if(!amt)return 0;const k=id.slice(4);(X[k]??={total:0,lines:[]});X[k].total+=amt;X[k].lines.push({...line,amt});return amt}
     if(!emp(id))return 0;if(!amt&&line.type!=='design')return 0;(P[id]??={raw:0,lines:[]});P[id].raw+=amt;P[id].lines.push({...line,amt});return amt};
   let photoProfit=0;
-  const abs={},designs={};
+  const abs=attModel().abs,designs={},DP=dailyPhoto();out.mods={};
   for(const d of Object.values(S.att)){
-    for(const[eid,r]of Object.entries(d.rows||{}))if(r.s==='absent'||r.s==='leave')(abs[eid]??=[]).push({date:d.date,s:r.s,cover:r.cover&&r.cover!==eid&&emp(r.cover)?r.cover:null});
+    for(const[id,x]of Object.entries(d.mods||{}))if(x.s!=='absent'&&!isFri(d.date))out.mods[id]=(out.mods[id]||0)+1;
     for(const x of d.designs||[])if(x.e&&x.a&&+x.n>0){const o=(designs[x.a]??={});o[x.e]=(o[x.e]||0)+(+x.n)}
   }
   let revenue=0,discounts=0,collected=0,tlPool=0,acPool=0;
   for(const r of S.recs){
     const c=cli(r.clientId)?.name||r.clientName||'عميل',m=r.mgmt||{},ph=r.photo||{};
-    const M=m.on?+m.price||0:0,Ph=ph.on?+ph.price||0:0;
+    const M=m.on?+m.price||0:0,Ph=photoOn(r)?+ph.price||0:0;
     const adFee=(r.adds||[]).filter(isAds).reduce((a,x)=>a+(+x.a||0),0)*(+(F.adsPct??10))/100;
     revenue+=M+Ph+adFee;discounts+=discOf(r);if(r.status==='paid')collected+=M+Ph+adFee-discOf(r);
     if(M){const p={...F.mgmtPct,...(m.pct||{})},T=teamOf(r),segs=T.creator;
@@ -354,10 +371,10 @@ function compute(){
       acPool+=M*p.accountant/100;
     }
     if(Ph){const p={...F.photoPct,...(ph.pct||{})};let o=0;
-      const ss=(ph.sessions||[]).filter(emp);
+      const ss=[...(ph.sessions||[]),...(DP.sh[r.clientId]||[]).map(x=>x.e)].filter(emp);
       if(ss.length){const pc=p.photographer+p.extraSession*(ss.length-1),tot=Ph*pc/100,cnt={};ss.forEach(e=>cnt[e]=(cnt[e]||0)+1);
         for(const[e,k]of Object.entries(cnt)){inc(out.sessions,e,k);o+=add(e,tot*k/ss.length,{type:'pct',role:'photographer',what:`تصوير · ${c} · ${k} من ${ss.length} جلسة (${pc}%)`})}}
-      const ed=(ph.edits||[]).filter(x=>emp(x.e));
+      const ed=[...(ph.edits||[]),...(DP.ed[r.clientId]||[])].filter(x=>emp(x.e));
       if(ed.length){const tot=Ph*p.editor/100,vs=ed.reduce((a,x)=>a+(+x.v||0),0);ed.forEach(x=>{inc(out.videos,x.e,+x.v||0);o+=add(x.e,vs?tot*(+x.v||0)/vs:tot/ed.length,{type:'pct',role:'editor',what:`مونتاج · ${c} · ${+x.v||0} فيديو`})})}
       o+=add(ph.script,Ph*p.scriptdir/100,{type:'pct',role:'scriptdir',what:`سكريبت وإخراج · ${c}`});
       (ph.talents||[]).filter(x=>x.e&&+x.pct).forEach(x=>o+=add(x.e,Ph*(+x.pct)/100,{type:'pct',role:'talent',what:`بلوجر / موديل ${+x.pct}% · ${c}`}));
@@ -587,22 +604,22 @@ function shrinkImage(file){return new Promise((ok,no)=>{const r=new FileReader()
   if(d.length>900000){cv.width=Math.round(W*.6);cv.height=Math.round(H*.6);cv.getContext('2d').drawImage(im,0,0,cv.width,cv.height);d=cv.toDataURL('image/jpeg',.7)}ok(d)};im.src=r.result};r.readAsDataURL(file)})}
 const httpUrl=u=>{u=(u||'').trim();if(!u)return'';return /^https?:\/\//i.test(u)?u:'https://'+u};
 /* ---------- نجم الشهر ---------- */
-const SUMF=[['present','حضور'],['absent','غياب'],['tasks','مهام خلصت'],['designs','تصميمات'],['posts','بوستات'],['sessions','جلسات تصوير'],['videos','فيديوهات'],['other','أخرى']];
+const SUMF=[['present','حضور'],['absent','غياب'],['tasks','مهام خلصت'],['designs','تصميمات'],['posts','بوستات'],['mods','موديريشن'],['sessions','جلسات تصوير'],['videos','فيديوهات'],['other','أخرى']];
 function syncStats(C){if(!S.fin||!db)return;const st={sessions:C.out.sessions,videos:C.out.videos,modAcc:C.out.modAcc};const j=JSON.stringify(st);
   if(j!==S.statsJ&&j!==JSON.stringify({sessions:S.stats?.sessions||{},videos:S.stats?.videos||{},modAcc:S.stats?.modAcc||{}})){S.statsJ=j;db.doc('stats/'+S.month).set(st).catch(err)}}
 function monthSum(){
   const m=S.month,days=new Set(),start=START(),grace=GRACE(),C=S.fin?compute():null;if(C)syncStats(C);
-  const ses=C?C.out.sessions:(S.stats?.sessions||{}),vid=C?C.out.videos:(S.stats?.videos||{});
-  for(const log of Object.values(S.checks||{}))for(const[d,x]of Object.entries(log))if(d.startsWith(m)&&x.in&&!isFri(d))days.add(d);
-  for(const d of Object.keys(S.att))if(!isFri(d))days.add(d);
+  const AM=attModel();AM.work.forEach(d=>days.add(d));
+  const dses={},dvid={},reels={},mods={};const DP=dailyPhoto();Object.values(DP.sh).flat().forEach(x=>{dses[x.e]=(dses[x.e]||0)+1;reels[x.e]=(reels[x.e]||0)+x.reels});Object.values(DP.ed).flat().forEach(x=>dvid[x.e]=(dvid[x.e]||0)+x.v);
+  for(const dd of Object.values(S.att))if(!isFri(dd.date))for(const[id,x]of Object.entries(dd.mods||{}))if(x.s!=='absent')mods[id]=(mods[id]||0)+1;
+  const ses=C?C.out.sessions:dses,vid=C?C.out.videos:dvid;
   const des={},pst={},br={};for(const dd of Object.values(S.att)){(dd.designs||[]).forEach(x=>{des[x.e]=(des[x.e]||0)+(+x.n||1);const o=((br[x.e]??={}).designs??={});o[x.t||'ديزاين']=(o[x.t||'ديزاين']||0)+(+x.n||1)});(dd.posts||[]).forEach(x=>{pst[x.e]=(pst[x.e]||0)+(+x.n||1);const o=((br[x.e]??={}).posts??={});o[x.t||'بوست']=(o[x.t||'بوست']||0)+(+x.n||1)})}
   const out={};
   for(const e of S.emps.filter(e=>!isOwnerEmp(e))){
-    let present=0,absent=0,hard=0,soft=0;
-    for(const d of days){const x=S.checks?.[e.id]?.[d],r=S.att[d]?.rows?.[e.id];
-      if(r&&r.s!=='present'){absent++;continue}
-      if(x?.in||r?.s==='present'){present++;const k=lateKind(x?.in);if(k==='hard')hard++;else if(k==='soft')soft++}}
-    const auto={present,absent,tasks:S.mTasks?.[e.id]?.done||0,designs:des[e.id]||0,posts:pst[e.id]||0,sessions:ses[e.id]||0,videos:vid[e.id]||0,other:0};
+    let hard=0,soft=0;const present=AM.pres[e.id]?.size||0,absent=(AM.abs[e.id]||[]).filter(a=>!isFri(a.date)).length;
+    for(const d of AM.pres[e.id]||[]){const k=lateKind(S.checks?.[e.id]?.[d]?.in);if(k==='hard')hard++;else if(k==='soft')soft++}
+    if(reels[e.id])((br[e.id]??={}).sessions??={})['ريل']=reels[e.id];
+    const auto={present,absent,tasks:S.mTasks?.[e.id]?.done||0,designs:des[e.id]||0,posts:pst[e.id]||0,mods:mods[e.id]||0,sessions:ses[e.id]||0,videos:vid[e.id]||0,other:0};
     const ov=(S.sumOv||{})[e.id]||{},eff={...auto};SUMF.forEach(([k])=>{if(ov[k]!=null&&ov[k]!=='')eff[k]=+ov[k]});
     out[e.id]={e,auto,ov,eff,hard,soft,taskAll:S.mTasks?.[e.id]?.all||0,br:br[e.id]||{}};
   }
@@ -614,13 +631,13 @@ function vSum(){
   <p class="small muted" style="margin:0">الأرقام بتتحسب لوحدها من البصمة والمتابعة اليومية والمهام وباقات التصوير. تقدر تعدّلها آخر الشهر، والرقم المتعدّل عليه <span style="color:var(--accent)">●</span>. الأرقام دي بتدخل في تقييم نجم الشهر. وتعديل «الغياب» و«التصميمات» بيغيّر المرتب كمان. الجلسات والفيديوهات بتتعدّل من باقة التصوير في الأكونت نفسه.</p>
   <div class="panel tbl"><table><thead><tr><th>الموظف</th>${SUMF.map(([,nm])=>`<th>${nm}</th>`).join('')}${ed?'<th>ملاحظة</th>':''}</tr></thead><tbody>
   ${list.map(x=>`<tr><td><b>${h(x.e.name)}</b><div class="small muted">${h(rolesTxt(x.e))}${x.hard?` · اتأخر ${x.hard}`:''}</div>${!ed&&x.ov.note?`<div class="small" style="color:var(--gold)">${h(x.ov.note)}</div>`:''}</td>
-   ${SUMF.map(([k])=>ed?`<td><input id="sm_${x.e.id}_${k}" type="number" min="0" value="${x.eff[k]}" style="width:64px" aria-label="${k}"></td>`:`<td class="num">${x.eff[k]}${k==='tasks'&&x.taskAll?`<span class="small muted">/${x.taskAll}</span>`:''}${(k==='designs'||k==='posts')&&x.br[k]&&Object.keys(x.br[k]).length>1?`<div class="small muted" style="white-space:nowrap">${Object.entries(x.br[k]).map(([t,c])=>c+' '+t).join(' · ')}</div>`:''}${x.ov[k]!=null&&x.ov[k]!==''&&+x.ov[k]!==x.auto[k]?' <span style="color:var(--accent)" title="متعدّل، المحسوب '+x.auto[k]+'">●</span>':''}</td>`).join('')}
+   ${SUMF.map(([k])=>ed?`<td><input id="sm_${x.e.id}_${k}" type="number" min="0" value="${x.eff[k]}" style="width:64px" aria-label="${k}"></td>`:`<td class="num">${x.eff[k]}${k==='tasks'&&x.taskAll?`<span class="small muted">/${x.taskAll}</span>`:''}${((k==='designs'||k==='posts')&&x.br[k]&&Object.keys(x.br[k]).length>1)||(k==='sessions'&&x.br[k])?`<div class="small muted" style="white-space:nowrap">${Object.entries(x.br[k]).map(([t,c])=>c+' '+t).join(' · ')}</div>`:''}${x.ov[k]!=null&&x.ov[k]!==''&&+x.ov[k]!==x.auto[k]?' <span style="color:var(--accent)" title="متعدّل، المحسوب '+x.auto[k]+'">●</span>':''}</td>`).join('')}
    ${ed?`<td><input id="sm_${x.e.id}_note" value="${h(x.ov.note||'')}" placeholder="سبب التعديل" style="min-width:140px"></td>`:''}</tr>`).join('')}</tbody></table></div></div>`;
 }
 function starRank(){
   const C=compute(),M=monthSum(),rows=Object.values(M.rows);
-  const meas={designer:'designs',creator:'posts',photographer:'sessions',editor:'videos'},mx={};
-  ['designs','posts','sessions','videos','tasks','other'].forEach(k=>mx[k]=Math.max(0,...rows.map(r=>r.eff[k])));
+  const meas={designer:'designs',creator:'posts',photographer:'sessions',editor:'videos',moderator:'mods'},mx={};
+  ['designs','posts','mods','sessions','videos','tasks','other'].forEach(k=>mx[k]=Math.max(0,...rows.map(r=>r.eff[k])));
   const cov={};for(const dd of Object.values(S.att))for(const r of Object.values(dd.rows||{}))if(r.cover&&r.s!=='present')cov[r.cover]=(cov[r.cover]||0)+1;
   const maxCov=Math.max(0,...Object.values(cov)),rt=S.ratings||{};
   return rows.map(R=>{const e=R.e,E=R.eff,W=(E.present+E.absent)||M.days||1;
@@ -682,7 +699,7 @@ function vAcc(){
     const r=S.recs.find(x=>x.clientId===c.id);
     const st=!r?'<span class="pill none">مش متسجّل الشهر ده</span>':r.status==='paid'?'<span class="pill paid">اتدفعت</span>':'<span class="pill unpaid">مستنية الدفع</span>';
     return `<div class="item"><div class="grow"><b>${h(c.name)}</b>${c.demo?'<span class="demo">مثال</span>':''}
-      <div class="row" style="gap:6px;margin-top:4px">${r?`<span class="pkg ${r.mgmt?.on?'on':''}">إدارة${r.mgmt?.on?' '+money(r.mgmt.price):''}</span><span class="pkg ${r.photo?.on?'on':''}">تصوير${r.photo?.on?' '+money(r.photo.price):''}</span>`:'<span class="small muted">اضغط «سجّل الشهر» وحدد الباقات والفريق</span>'}</div></div>
+      <div class="row" style="gap:6px;margin-top:4px">${r?`<span class="pkg ${r.mgmt?.on?'on':''}">إدارة${r.mgmt?.on?' '+money(r.mgmt.price):''}</span><span class="pkg ${photoOn(r)?'on':''}">تصوير${photoOn(r)?' '+money(r.photo?.price):''}</span>${photoOn(r)&&!+r.photo?.price?'<span class="pill red">فيه تصوير · حدد سعر الباقة</span>':''}`:`<span class="small muted">اضغط «سجّل الشهر» وحدد الباقات والفريق</span>${dailyPhoto().sh[c.id]||dailyPhoto().ed[c.id]?'<span class="pill red">فيه تصوير الشهر ده</span>':''}`}</div></div>
      ${r?`<span class="amt">${egp(recTotal(r))}</span>`:''}${st}
      <div class="row"><button class="btn sm" data-act="editRec" data-c="${c.id}">${r?'تعديل':'سجّل الشهر'}</button>${r&&recTotal(r)?`<button class="btn sm primary" data-act="viewInv" data-id="${r.id}">الفاتورة</button>`:''}<button class="btn sm ghost" data-act="editClient" data-id="${c.id}" aria-label="بيانات العميل">⋯</button></div></div>`}).join('')}</div></div></div>`;
 }
@@ -698,44 +715,42 @@ function vTeam(){
   return `<div class="stack">${demoBanner()}<h2>الفريق · ${S.emps.length}</h2>${qa}
   <div class="panel"><div class="list">${[...S.emps].sort((a,b)=>firstIdx(a)-firstIdx(b)).map(e=>`<div class="item"><div class="grow"><b>${h(e.name)}</b>${e.demo?'<span class="demo">مثال</span>':''}<div class="small muted">${h(rolesTxt(e))}</div></div>${e.email?`<span class="pill paid" dir="ltr">${h(e.email)}</span>`:'<span class="pill none">من غير إيميل · مش هيقدر يبصم</span>'}<span class="amt">${egp(C.P[e.id]?.total||0)}</span><button class="btn sm" data-act="editEmp" data-id="${e.id}">تعديل</button></div>`).join('')}</div></div></div>`;
 }
+const EN={
+  posts:{title:'بوستات النهارده',hint:'كل سطر = بوست أو ستوري. لو كريتور غايب، سجّل باسم اللي نزّل مكانه (كريتور تاني أو التيم ليدر) وهو اللي هياخد اليوم.',roles:['creator','teamleader'],f:'t',opts:PS_T,def:'بوست',add:'+ بوست / ستوري',auto:'creator'},
+  designs:{title:'تصميمات النهارده',hint:'كل سطر = تصميم واحد. أي حد من الفريق ممكن يعمل تصميم، ويتحسب لصاحبه.',roles:['designer'],f:'t',opts:DG_T,def:'ديزاين',add:'+ تصميم',auto:'designer'},
+  shoots:{title:'تصوير النهارده',hint:'مين صوّر، ولأنهي عميل، وكام ريل. التصوير بيضيف باقة التصوير على فاتورة العميل لوحده.',roles:['photographer'],f:'n',ph:'عدد الريل',add:'+ جلسة تصوير'},
+  edits:{title:'مونتاج النهارده',hint:'مين منتج، ولأنهي عميل، وكام فيديو.',roles:['editor'],f:'n',ph:'كام فيديو',add:'+ مونتاج'}};
 function vAtt(){
   const d=S.attDate,day=S.att[d]||{};
   if(!S.attDraft||S.attDraft.date!==d){
-    const des=JSON.parse(JSON.stringify(day.designs||[]));
-    if(!des.length)S.emps.filter(e=>has(e,'designer')).forEach(e=>des.push({e:e.id,a:'',t:'ديزاين'}));
-    const rows=JSON.parse(JSON.stringify(day.rows||{}));
-    if(!day.rows&&d<=today()&&!isFri(d)){const any=Object.values(S.checks||{}).some(o=>o[d]?.in);if(any)S.emps.filter(e=>rolesOf(e).some(k=>DAILY.includes(k))).forEach(e=>rows[e.id]={s:S.checks[e.id]?.[d]?.in?'present':'absent'})}
-    const pst=JSON.parse(JSON.stringify(day.posts||[]));if(!pst.length)S.emps.filter(e=>has(e,'creator')).forEach(e=>pst.push({e:e.id,a:'',t:'بوست'}));
-    S.attDraft={date:d,rows,designs:des,posts:pst};
+    const D={date:d,mods:JSON.parse(JSON.stringify(day.mods||{}))};
+    for(const[k,c]of Object.entries(EN)){D[k]=JSON.parse(JSON.stringify(day[k]||[]));if(!D[k].length&&c.auto)S.emps.filter(e=>has(e,c.auto)).forEach(e=>D[k].push({e:e.id,a:'',[c.f]:c.def??''}))}
+    S.emptyMods=!day.mods;S.attDraft=D;
   }
-  const D=S.attDraft,dailyEmps=S.emps.filter(e=>rolesOf(e).some(k=>DAILY.includes(k))),designers=S.emps.filter(e=>has(e,'designer'));
+  const D=S.attDraft;
   if(!S.emps.length)return `<div class="panel empty"><h3>مفيش موظفين لسه</h3><p>${S.fin?'ضيف الفريق من تبويب «الفريق» الأول.':'الإدارة لسه ماضافتش الفريق.'}</p></div>`;
-  const saved=!!S.att[d],accs=S.clients.filter(c=>c.active!==false);
-  const sum={};for(const dd of Object.values(S.att)){for(const[eid,r]of Object.entries(dd.rows||{})){(sum[eid]??={p:0,a:0,c:0,d:0});if(r.s==='present')sum[eid].p++;else sum[eid].a++;if(r.cover&&r.s!=='present')(sum[r.cover]??={p:0,a:0,c:0,d:0}).c++}
-    for(const x of dd.designs||[])if(x.e&&+x.n)(sum[x.e]??={p:0,a:0,c:0,d:0}).d+=+x.n}
+  const saved=!!S.att[d],accs=S.clients.filter(c=>c.active!==false),mods=S.emps.filter(e=>has(e,'moderator'));
   const empOpts=(sel,ex)=>`<option value="">محدش</option>`+S.emps.filter(x=>x.id!==ex).map(x=>`<option value="${x.id}" ${sel===x.id?'selected':''}>${h(x.name)} — ${h(rolesTxt(x))}</option>`).join('');
+  const people=roles=>[...S.emps.filter(e=>roles.some(r=>has(e,r))),...S.emps.filter(e=>!roles.some(r=>has(e,r)))];
+  const block=(k,c)=>`<div class="panel"><h3>${c.title}</h3><p class="small muted" style="margin:4px 0 10px">${c.hint}</p>
+   <div class="lst">${(D[k]||[]).map((x,i)=>`<div class="r"><select id="en_${k}_e_${i}" data-en="${k}" data-f="e" data-i="${i}" aria-label="مين">${people(c.roles).map(e=>`<option value="${e.id}" ${x.e===e.id?'selected':''}>${h(e.name)}</option>`).join('')}</select>
+     <select id="en_${k}_a_${i}" data-en="${k}" data-f="a" data-i="${i}" aria-label="العميل"><option value="">العميل</option>${accs.map(cl=>`<option value="${cl.id}" ${x.a===cl.id?'selected':''}>${h(cl.name)}</option>`).join('')}</select>
+     ${c.f==='t'?`<select id="en_${k}_t_${i}" data-en="${k}" data-f="t" data-i="${i}" aria-label="النوع" style="flex:0 0 110px">${c.opts.map(o=>`<option ${(x.t||c.def)===o?'selected':''}>${o}</option>`).join('')}</select>`
+       :`<input id="en_${k}_n_${i}" data-en="${k}" data-f="n" data-i="${i}" type="number" min="0" placeholder="${c.ph}" value="${x.n??''}" aria-label="${c.ph}">`}
+     <button class="x" data-act="rmEn" data-k="${k}" data-i="${i}" aria-label="شيل">−</button></div>`).join('')}</div>
+   <button class="btn sm" data-act="addEn" data-k="${k}" style="margin-top:8px">${c.add}</button></div>`;
   return `<div class="stack">
-  <div class="row between"><h2>المتابعة اليومية</h2><div class="row"><input type="date" id="attDate" value="${d}" style="width:auto"><span class="pill ${saved?'paid':'none'}">${saved?'متسجّل':'لسه ماتسجّلش'}</span></div></div>
-  ${isFri(d)?'<div class="notice">الجمعة إجازة: مفيش بصمة ولا حضور، ومش بيتحسب غياب أو تأخير.</div>':vPunches(d)}
-  <div class="panel"><h3>الحضور</h3><p class="small muted" style="margin:4px 0 0">يوم الغياب بيتخصم 1/30 من الشغل اليومي. الكريتور: اللي ينزّل بوستات على أكونتاته يوم غيابه (كريتور تاني أو التيم ليدر) بياخد نصيب اليوم. الموديريتور: اختار مين غطّى مكانه. الديزاينر: مرتبه بعدد التصميمات، واللي يعمل تصميم مكانه يتسجّل باسمه تحت.</p>
-   <div class="list">${dailyEmps.map(e=>{const r=D.rows[e.id]||{s:'present'},off=r.s!=='present';
-   return `<div class="item" style="align-items:flex-start"><div style="flex:0 0 150px"><b>${h(e.name)}</b><div class="small muted">${h(rolesOf(e).filter(k=>DAILY.includes(k)).map(k=>ROLES[k]).join(' · '))}</div>${punch(e.id,d)}</div>
-    <div class="stack grow" style="gap:8px">
-     <div class="seg">${[['present','حاضر','p'],['absent','غياب','a'],['leave','إجازة','a']].map(([k,nm,c])=>`<button class="${r.s===k?'on '+c:''}" data-act="attS" data-e="${e.id}" data-s="${k}">${nm}</button>`).join('')}</div>
-     ${off&&has(e,'moderator')?`<div class="field"><label class="label" for="cv_${e.id}">مين غطّى مكانه؟</label><select id="cv_${e.id}" data-att="cover" data-e="${e.id}">${empOpts(r.cover,e.id)}</select></div>`:''}
-     ${off&&has(e,'designer')&&!has(e,'creator')?'<div class="small muted">التصميمات اللي تتعمل مكانه سجّلها باسم اللي عملها في «تصميمات النهارده».</div>':''}
-     ${off&&has(e,'creator')?'<div class="small muted">اللي هينزّل بوستات على أكونتاته النهارده تحت في «بوستات النهارده» هو اللي هياخد اليوم.</div>':''}
-    </div></div>`}).join('')||'<p class="small muted">مفيش موظفين شغلهم يومي في الفريق.</p>'}</div></div>
-  <div class="panel"><h3>تصميمات النهارده</h3><p class="small muted" style="margin:4px 0 10px">كل سطر = تصميم واحد. اختار مين عمله والأكونت والنوع (تحسين، وضع لوجو، ديزاين، كيرزل، فيديو ايديت). الديزاينر ياخد نسبته كاملة لما يوصل ${S.fin?S.F.designTarget:8} تصميمات للأكونت في الشهر. لو حد غطّى، سجّل التصميم باسم اللي عمله.</p>
-   <div class="lst">${D.designs.map((x,i)=>`<div class="r"><select id="dg_e_${i}" data-dg="e" data-i="${i}" aria-label="الديزاينر">${S.emps.map(e=>`<option value="${e.id}" ${x.e===e.id?'selected':''}>${h(e.name)}</option>`).join('')}</select>
-     <select id="dg_a_${i}" data-dg="a" data-i="${i}" aria-label="الأكونت"><option value="">اختار الأكونت</option>${accs.map(c=>`<option value="${c.id}" ${x.a===c.id?'selected':''}>${h(c.name)}</option>`).join('')}</select>
-     <select id="dg_t_${i}" data-dg="t" data-i="${i}" aria-label="نوع التصميم" style="flex:0 0 120px">${DG_T.map(o=>`<option ${(x.t||'ديزاين')===o?'selected':''}>${o}</option>`).join('')}</select><button class="x" data-act="rmDg" data-i="${i}" aria-label="شيل">−</button></div>`).join('')}</div>
-   <button class="btn sm" data-act="addDg" style="margin-top:8px">+ تصميم تاني</button></div>
-  <div class="panel"><h3>بوستات النهارده</h3><p class="small muted" style="margin:4px 0 10px">كل سطر = بوست أو ستوري واحد. اختار مين نزّله والأكونت والنوع. لو كريتور غايب، سجّل البوستات باسم اللي نزّلها مكانه (كريتور تاني أو التيم ليدر) وهو اللي هياخد نصيب اليوم.</p>
-   <div class="lst">${(D.posts||[]).map((x,i)=>`<div class="r"><select id="ps_e_${i}" data-ps="e" data-i="${i}" aria-label="الكريتور">${[...S.emps.filter(e=>has(e,'creator')||has(e,'teamleader')),...S.emps.filter(e=>!has(e,'creator')&&!has(e,'teamleader'))].map(e=>`<option value="${e.id}" ${x.e===e.id?'selected':''}>${h(e.name)}</option>`).join('')}</select>
-     <select id="ps_a_${i}" data-ps="a" data-i="${i}" aria-label="الأكونت"><option value="">اختار الأكونت</option>${accs.map(c=>`<option value="${c.id}" ${x.a===c.id?'selected':''}>${h(c.name)}</option>`).join('')}</select>
-     <select id="ps_t_${i}" data-ps="t" data-i="${i}" aria-label="النوع" style="flex:0 0 100px">${PS_T.map(o=>`<option ${(x.t||'بوست')===o?'selected':''}>${o}</option>`).join('')}</select><button class="x" data-act="rmPs" data-i="${i}" aria-label="شيل">−</button></div>`).join('')}</div>
-   <button class="btn sm" data-act="addPs" style="margin-top:8px">+ بوست / ستوري تاني</button></div>
+  <div class="row between"><h2>المتابعة اليومية</h2><div class="row"><input type="date" id="attDate" value="${d}" style="width:auto"><span class="pill ${saved?'paid':'none'}">${saved?'متسجّلة':'لسه ماتسجّلتش'}</span></div></div>
+  ${isFri(d)?'<div class="notice">الجمعة إجازة: مفيش بصمة، ومش بيتحسب غياب أو تأخير.</div>':''}
+  <p class="small muted" style="margin:0">الحضور والغياب بيتحسبوا من البصمة لوحدهم. أي يوم شغل حد مابصمش فيه ومالوش شغل متسجّل = غياب، وتقدر تعدّله من «ملخص الشهر».</p>
+  ${block('posts',EN.posts)}
+  ${block('designs',EN.designs)}
+  <div class="panel"><h3>موديريشن النهارده</h3><p class="small muted" style="margin:4px 0 10px">علّم على كل موديريتور. لو غاب، اختار مين غطّى مكانه وهو اللي هياخد مرتب اليوم.</p>
+   <div class="list">${mods.map(e=>{const x=D.mods[e.id]||{s:'done'},off=x.s==='absent';return `<div class="item" style="align-items:flex-start"><div style="flex:0 0 140px"><b>${h(e.name)}</b>${punch(e.id,d)}</div>
+    <div class="stack grow" style="gap:8px"><div class="seg">${[['done','تم ✓','p'],['absent','غاب','a']].map(([k,nm,c])=>`<button class="${x.s===k?'on '+c:''}" data-act="modS" data-e="${e.id}" data-s="${k}">${nm}</button>`).join('')}</div>
+    ${off?`<div class="field"><label class="label" for="md_cv_${e.id}">مين غطّى مكانه؟</label><select id="md_cv_${e.id}" data-mod="${e.id}">${empOpts(x.cover,e.id)}</select></div>`:''}</div></div>`}).join('')||'<p class="small muted">مفيش موديريتور في الفريق.</p>'}</div></div>
+  ${block('shoots',EN.shoots)}
+  ${block('edits',EN.edits)}
   <div><button class="btn primary" data-act="saveAtt">حفظ المتابعة اليومية</button></div>
   ${S.fin||S.tl?`<div class="row"><button class="btn sm ghost" data-act="tab" data-k="sum">ملخص الشهر كامل ←</button></div>`:''}</div>`;
 }
@@ -834,7 +849,7 @@ function sheetEmp(id){
 }
 function blankRec(){return{mgmt:{on:true,price:0,desc:'',team:{},pct:{}},photo:{on:false,price:0,desc:'',sessions:[],edits:[],script:'',sales:'',talents:[],pct:{}},discount:0,adds:[],subs:[],status:'unpaid'}}
 function sheetRec(cid){const ex=S.recs.find(r=>r.clientId===cid);const b=blankRec();
-  const rec=ex?JSON.parse(JSON.stringify(ex)):b;rec.mgmt={...b.mgmt,...(rec.mgmt||{})};rec.photo={...b.photo,...(rec.photo||{})};rec.photo.talents=rec.photo.talents||[];rec.adds=rec.adds||[];rec.subs=rec.subs||[];if(+rec.discount){rec.subs.push({d:'خصم',a:+rec.discount,k:'disc'});rec.discount=0}
+  const rec=ex?JSON.parse(JSON.stringify(ex)):b;rec.mgmt={...b.mgmt,...(rec.mgmt||{})};rec.photo={...b.photo,...(rec.photo||{})};rec.photo.talents=rec.photo.talents||[];{const DP=dailyPhoto();if((DP.sh[cid]||DP.ed[cid])&&!rec.photo.on)rec.photo.on=true}rec.adds=rec.adds||[];rec.subs=rec.subs||[];if(+rec.discount){rec.subs.push({d:'خصم',a:+rec.discount,k:'disc'});rec.discount=0}
   S.edit={kind:'rec',clientId:cid,rec,id:ex?.id};drawRec()}
 function drawRec(){
   const{rec,clientId}=S.edit,c=cli(clientId),m=rec.mgmt,ph=rec.photo,F=S.F;
@@ -852,9 +867,10 @@ function drawRec(){
    <div class="sec ${ph.on?'':'off'}"><div class="sec-h"><label><input type="checkbox" id="p_on" ${ph.on?'checked':''} data-act="togPkg"> باقة التصوير</label>${ph.on?`<div style="width:150px"><input id="p_price" type="number" min="0" value="${ph.price||''}" placeholder="سعر الباقة" aria-label="سعر باقة التصوير"></div>`:'<span class="small muted">مفيش تصوير الشهر ده</span>'}</div>
    ${ph.on?`<div class="stack" style="margin-top:12px;gap:12px">
      <div class="field"><label class="label" for="p_desc">محتوى الباقة</label><input id="p_desc" value="${h(ph.desc)}" placeholder="مثلاً: جلستين تصوير + 6 فيديوهات"></div>
-     <div><div class="label" style="margin-bottom:6px">جلسات التصوير — مين صوّر</div><div class="lst">${ph.sessions.map((e,i)=>`<div class="r">${sel('ses_'+i,'photographer',e,`data-ses="${i}"`)}<button class="x" data-act="rmSes" data-i="${i}" aria-label="شيل الجلسة">−</button></div>`).join('')}</div>
+     ${(()=>{const DP=dailyPhoto(),sh=DP.sh[clientId]||[],ed=DP.ed[clientId]||[];return sh.length||ed.length?`<div class="notice" style="background:var(--accent-soft)"><b>من المتابعة اليومية:</b> ${sh.map(x=>`${h(emp(x.e)?.name||'')} صوّر ${x.reels} ريل يوم ${x.date.slice(8)}`).join('، ')}${sh.length&&ed.length?' · ':''}${ed.map(x=>`${h(emp(x.e)?.name||'')} منتج ${x.v} فيديو`).join('، ')}<div class="small">دول بيتحسبوا لوحدهم. اكتب سعر الباقة بس.</div></div>`:''})()}
+     <div><div class="label" style="margin-bottom:6px">جلسات إضافية مش متسجّلة في المتابعة اليومية</div><div class="lst">${ph.sessions.map((e,i)=>`<div class="r">${sel('ses_'+i,'photographer',e,`data-ses="${i}"`)}<button class="x" data-act="rmSes" data-i="${i}" aria-label="شيل الجلسة">−</button></div>`).join('')}</div>
        <button class="btn sm" data-act="addSes" style="margin-top:6px">+ جلسة</button><div class="small muted" style="margin-top:4px">${pp.photographer}% لأول جلسة + ${pp.extraSession}% لكل جلسة زيادة</div></div>
-     <div><div class="label" style="margin-bottom:6px">المونتاج — مين منتج وكام فيديو</div><div class="lst">${ph.edits.map((x,i)=>`<div class="r">${sel('ed_e_'+i,'editor',x.e,`data-ed="${i}"`)}<input id="ed_v_${i}" type="number" min="0" value="${x.v??''}" placeholder="فيديو" aria-label="عدد الفيديوهات"><button class="x" data-act="rmEd" data-i="${i}" aria-label="شيل">−</button></div>`).join('')}</div>
+     <div><div class="label" style="margin-bottom:6px">مونتاج إضافي مش متسجّل في المتابعة اليومية</div><div class="lst">${ph.edits.map((x,i)=>`<div class="r">${sel('ed_e_'+i,'editor',x.e,`data-ed="${i}"`)}<input id="ed_v_${i}" type="number" min="0" value="${x.v??''}" placeholder="فيديو" aria-label="عدد الفيديوهات"><button class="x" data-act="rmEd" data-i="${i}" aria-label="شيل">−</button></div>`).join('')}</div>
        <button class="btn sm" data-act="addEd" style="margin-top:6px">+ مونتير</button></div>
      <div class="grid2"><div class="field"><label class="label" for="p_script">سكريبت وإخراج</label>${sel('p_script','scriptdir',ph.script)}</div><div class="field"><label class="label" for="p_sales">سيلز التصوير</label>${salesSel('p_sales',ph.sales||m.team?.sales)}</div></div>
      <div><div class="label" style="margin-bottom:6px">بلوجر / موديل / أخرى — النسبة بتحددها لكل أكونت</div><div class="lst">${ph.talents.map((x,i)=>`<div class="r">${salesSel('tl_e_'+i,x.e,'talent')}<input id="tl_p_${i}" type="number" min="0" step="0.5" value="${x.pct??''}" placeholder="%" aria-label="النسبة" style="width:74px"><button class="x" data-act="rmTal" data-i="${i}" aria-label="شيل">−</button></div>`).join('')}</div>
@@ -887,7 +903,7 @@ function readRec(){
 function invText(r){
   const c=cli(r.clientId),cfg=S.cfg;let t=`فاتورة ${cfg.company||'Pensell'}\nرقم الفاتورة: ${r.no}\nالعميل: ${c?.name||r.clientName}\nعن شهر: ${mName(r.month)}\n\n`;
   if(r.mgmt?.on)t+=`• باقة الإدارة${r.mgmt.desc?` (${r.mgmt.desc})`:''}: ${money(r.mgmt.price)} ج.م\n`;
-  if(r.photo?.on)t+=`• باقة التصوير${r.photo.desc?` (${r.photo.desc})`:''}: ${money(r.photo.price)} ج.م\n`;
+  if(photoOn(r))t+=`• باقة التصوير${photoDesc(r)?` (${photoDesc(r)})`:''}: ${money(r.photo?.price)} ج.م\n`;
   freeOf(r).forEach(f=>t+=`• ${f.desc||'شغل إضافي'}: ${money(f.price)} ج.م\n`);
   (r.adds||[]).filter(x=>+x.a).forEach(x=>t+=`• ${x.d||'إضافة'}: ${money(x.a)} ج.م\n`);
   if(+r.discount)t+=`• خصم: −${money(r.discount)} ج.م\n`;
@@ -957,7 +973,7 @@ function sheetView(id,refresh){
    <div class="paper-b"><div class="lbl">إلى</div><b style="font-size:17px;color:#231E1F">${h(c?.name||r.clientName)}</b>
     <div class="tbl" style="margin-top:10px"><table><thead><tr><th>البند</th><th style="text-align:left">القيمة</th></tr></thead><tbody>
      ${r.mgmt?.on?`<tr><td>باقة الإدارة${r.mgmt.desc?`<div class="desc">${h(r.mgmt.desc)}</div>`:''}</td><td class="num" style="text-align:left">${money(r.mgmt.price)}</td></tr>`:''}
-     ${r.photo?.on?`<tr><td>باقة التصوير${r.photo.desc?`<div class="desc">${h(r.photo.desc)}</div>`:''}</td><td class="num" style="text-align:left">${money(r.photo.price)}</td></tr>`:''}
+     ${photoOn(r)?`<tr><td>باقة التصوير${photoDesc(r)?`<div class="desc">${h(photoDesc(r))}</div>`:''}</td><td class="num" style="text-align:left">${money(r.photo?.price)}</td></tr>`:''}
      ${freeOf(r).map(f=>`<tr><td>${h(f.desc||'شغل إضافي')}</td><td class="num" style="text-align:left">${money(f.price)}</td></tr>`).join('')}
      ${(r.adds||[]).filter(x=>+x.a).map(x=>`<tr><td>${h(x.d||'إضافة')}</td><td class="num" style="text-align:left">${money(x.a)}</td></tr>`).join('')}
      ${(r.subs||[]).some(x=>+x.a)||+r.discount?`<tr><td><b>الإجمالي</b></td><td class="num" style="text-align:left"><b>${money(pkgTotal(r)+sumA(r.adds)+freeOf(r).reduce((a,f)=>a+(+f.price||0),0))}</b></td></tr>`:''}
@@ -983,6 +999,8 @@ document.addEventListener('input',e=>{
   if(t.dataset.att)(S.attDraft.rows[t.dataset.e]??={s:'present'})[t.dataset.att]=t.value||null;
   if(t.dataset.dg){const x=S.attDraft.designs[+t.dataset.i];if(x)x[t.dataset.dg]=t.dataset.dg==='n'?(t.value===''?'':+t.value):t.value}
   if(t.dataset.ps){const x=S.attDraft.posts[+t.dataset.i];if(x)x[t.dataset.ps]=t.dataset.ps==='n'?(t.value===''?'':+t.value):t.value}
+  if(t.dataset.en){const x=S.attDraft[t.dataset.en]?.[+t.dataset.i];if(x)x[t.dataset.f]=t.dataset.f==='n'?(t.value===''?'':+t.value):t.value}
+  if(t.dataset.mod){(S.attDraft.mods[t.dataset.mod]??={s:'absent'}).cover=t.value||null}
 });
 document.addEventListener('change',e=>{
   const t=e.target;
@@ -991,6 +1009,8 @@ document.addEventListener('change',e=>{
   if(t.dataset.att)(S.attDraft.rows[t.dataset.e]??={s:'present'})[t.dataset.att]=t.value||null;
   if(t.dataset.dg){const x=S.attDraft.designs[+t.dataset.i];if(x)x[t.dataset.dg]=t.dataset.dg==='n'?(t.value===''?'':+t.value):t.value}
   if(t.dataset.ps){const x=S.attDraft.posts[+t.dataset.i];if(x)x[t.dataset.ps]=t.dataset.ps==='n'?(t.value===''?'':+t.value):t.value}
+  if(t.dataset.en){const x=S.attDraft[t.dataset.en]?.[+t.dataset.i];if(x)x[t.dataset.f]=t.dataset.f==='n'?(t.value===''?'':+t.value):t.value}
+  if(t.dataset.mod){(S.attDraft.mods[t.dataset.mod]??={s:'absent'}).cover=t.value||null}
   if(t.id==='w_file'&&t.files&&t.files[0]){const f=t.files[0];document.getElementById('w_prev').innerHTML='<span class="small muted">بيجهّز الصورة…</span>';shrinkImage(f).then(d=>{if(S.edit?.kind!=='work')return;S.edit.img=d;document.getElementById('w_prev').innerHTML=`<img src="${d}" alt="" style="max-height:220px;border-radius:10px">`}).catch(()=>toast('الصورة دي مش راضية تفتح، جرّب صورة تانية'));return}
   if(t.id==='fr_c'){document.getElementById('fr_pw').hidden=!t.value}
   if(t.dataset.dist){readDist(t.dataset.dist)}
@@ -1010,7 +1030,7 @@ document.addEventListener('click',async e=>{
   if(a==='viewInv')return sheetView(b.dataset.id);
   if(a==='cp')return copy(b.dataset.t);
   if(a==='cpInv')return copy(invText(S.recs.find(x=>x.id===b.dataset.id)),'نص الفاتورة اتنسخ');
-  if(a==='togPkg'){readRec();const r=S.edit.rec;if(b.id==='m_on')r.mgmt.on=b.checked;else{r.photo.on=b.checked;if(b.checked&&!r.photo.sessions.length){r.photo.sessions=[''];r.photo.edits=[{e:'',v:''}]}}drawRec();return}
+  if(a==='togPkg'){readRec();const r=S.edit.rec;if(b.id==='m_on')r.mgmt.on=b.checked;else{r.photo.on=b.checked;}drawRec();return}
   if(a==='addAdj'){readRec();S.edit.rec[b.dataset.l].push(b.dataset.l==='subs'?{d:b.dataset.d,a:'',k:b.dataset.k||'paid'}:{d:b.dataset.d,a:'',k:/إعلان/.test(b.dataset.d)?'ads':'other'});drawRec();const l=S.edit.rec[b.dataset.l].length-1;document.getElementById((b.dataset.l==='subs'?'sb_a_':'ad_a_')+l)?.focus();return}
   if(a==='rmAdj'){readRec();S.edit.rec[b.dataset.l].splice(+b.dataset.i,1);drawRec();return}
   if(a==='pdfInv'){b.disabled=true;const t=b.textContent;b.textContent='بيجهّز الـ PDF…';try{await invPdf(S.recs.find(x=>x.id===b.dataset.id))}catch(e){console.warn(e);toast('اختار «حفظ كـ PDF» من شاشة الطباعة');setTimeout(()=>window.print(),300)}b.disabled=false;b.textContent=t;return}
@@ -1113,12 +1133,15 @@ document.addEventListener('click',async e=>{
   if(a==='rmDg'){S.attDraft.designs.splice(+b.dataset.i,1);render();return}
   if(a==='addPs'){S.attDraft.posts.push({e:S.emps.find(x=>has(x,'creator'))?.id||S.emps[0]?.id,a:'',t:'بوست'});render();return}
   if(a==='rmPs'){S.attDraft.posts.splice(+b.dataset.i,1);render();return}
-  if(a==='saveAtt'){const D=S.attDraft;document.querySelectorAll('[data-att]').forEach(el=>(D.rows[el.dataset.e]??={s:'present'})[el.dataset.att]=el.value||null);
-    document.querySelectorAll('[data-dg]').forEach(el=>{const x=D.designs[+el.dataset.i];if(x)x[el.dataset.dg]=el.value});
-    const rows={};S.emps.filter(e=>rolesOf(e).some(k=>DAILY.includes(k))).forEach(e=>{const r=D.rows[e.id]||{s:'present'};rows[e.id]={s:r.s||'present',work:r.work||'',cover:r.s!=='present'?(r.cover||null):null}});
-    document.querySelectorAll('[data-ps]').forEach(el=>{const x=D.posts[+el.dataset.i];if(x)x[el.dataset.ps]=el.value});
-    const designs=D.designs.filter(x=>x.e&&x.a).map(x=>({e:x.e,a:x.a,t:x.t||'ديزاين',n:1})),posts=(D.posts||[]).filter(x=>x.e&&x.a).map(x=>({e:x.e,a:x.a,t:x.t||'بوست',n:1}));
-    const prev=S.att[S.attDate];const body={date:S.attDate,rows,designs,posts};if(prev?.demo)body.demo=true;
+  if(a==='addEn'){const k=b.dataset.k,c=EN[k];S.attDraft[k].push({e:S.emps.find(x=>c.roles.some(r=>has(x,r)))?.id||S.emps[0]?.id,a:'',[c.f]:c.def??''});render();return}
+  if(a==='rmEn'){S.attDraft[b.dataset.k].splice(+b.dataset.i,1);render();return}
+  if(a==='modS'){const x=(S.attDraft.mods[b.dataset.e]??={});x.s=b.dataset.s;if(x.s!=='absent')x.cover=null;render();return}
+  if(a==='saveAtt'){const D=S.attDraft;
+    document.querySelectorAll('[data-en]').forEach(el=>{const x=D[el.dataset.en]?.[+el.dataset.i];if(x)x[el.dataset.f]=el.dataset.f==='n'?(el.value===''?'':+el.value):el.value});
+    document.querySelectorAll('[data-mod]').forEach(el=>{(D.mods[el.dataset.mod]??={s:'absent'}).cover=el.value||null});
+    const body={date:S.attDate,rows:S.att[S.attDate]?.rows||{},mods:{}};
+    S.emps.filter(e=>has(e,'moderator')).forEach(e=>{const x=D.mods[e.id]||{s:'done'};body.mods[e.id]={s:x.s||'done',cover:x.s==='absent'?(x.cover||null):null}});
+    for(const[k,c]of Object.entries(EN))body[k]=(D[k]||[]).filter(x=>x.e&&x.a).map(x=>c.f==='t'?{e:x.e,a:x.a,t:x.t||c.def,n:1}:{e:x.e,a:x.a,n:k==='edits'?Math.max(1,+x.n||0):(+x.n||0)});
     if(await save(()=>db.doc('attendance/'+S.attDate).set(body),'المتابعة اتحفظت')){S.attDraft=null;document.activeElement?.blur();render()}return}
   if(a==='saveCfg'){const d={company:v('s_company'),vf:v('s_vf'),ip:v('s_ip'),ipLink:v('s_iplink'),note:v('s_note')};if(d.ipLink&&!/^https?:\/\//.test(d.ipLink))d.ipLink='https://'+d.ipLink;if(await save(()=>db.doc('cfg/settings').set(d,{merge:true}),'بيانات الدفع اتحفظت')){S.cfg={...S.cfg,...d};document.activeElement?.blur();render()}return}
   if(a==='saveFin'){const mg={},pp={};Object.keys(MG).forEach(k=>mg[k]=n('mp_'+k));Object.keys(PH).forEach(k=>pp[k]=n('pp_'+k));
