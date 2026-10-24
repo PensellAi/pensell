@@ -1,5 +1,5 @@
 // Pensell: بيخلّي التطبيق يفتح على طول من الموبايل، ويجيب التحديثات في الخلفية.
-const CACHE='pensell-v3';
+const CACHE='pensell-v4';
 const CORE=['/app.html','/logo-l.png','/logo-d.png','/icon-192.png'];
 self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE)).catch(()=>{}))});
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
@@ -20,7 +20,7 @@ self.addEventListener('fetch',e=>{
 // ---------- الإشعارات ----------
 self.addEventListener('push',e=>{let d={};try{d=e.data.json()}catch(_){d={title:'Pensell',body:e.data?e.data.text():''}}
   const call=d.kind==='call',opt={body:d.body||'',tag:d.tag||'pensell',renotify:true,icon:'/icon-192.png',badge:'/icon-192.png',data:{url:d.url||'/app.html'},
-    vibrate:call?[700,300,700,300,700,300,700]:[200,100,200],requireInteraction:call};
+    vibrate:call?[1000,400,1000,400,1000,400,1000,400,1000,400,1000]:[250,100,250,100,500],requireInteraction:call,silent:false};
   if(call)opt.actions=[{action:'join',title:'انضم'}];
   e.waitUntil(self.clients.matchAll({type:'window',includeUncontrolled:true}).then(cs=>{
     // لو التطبيق مفتوح قدامه، هو اللي بيرن ويعرض التنبيه بنفسه

@@ -363,8 +363,10 @@ async function start(u){
       unsubMine.push(db.doc('checkins/'+me.id).onSnapshot(x=>{S.myLog=normLog(x.exists?x.data(SNAP).log:{});schedSync();rr()},err));
       unsubMine.push(db.doc('tasks/'+me.id+'_'+d).onSnapshot(x=>{S.myTask=x.exists?x.data():null;S.myTaskLoaded=d;schedSync();rr()},err));
       unsubMine.push(db.doc('mine/'+me.id).onSnapshot(x=>{S.myMine=x.exists?x.data():null;rr()},err));
+      unsubMine.push(db.collection('reports').where('email','==',S.email).onSnapshot(x=>{S.myReps={};x.docs.forEach(d=>S.myReps[d.id]={id:d.id,...d.data(SNAP)});rr()},err));
       unsubMine.push(db.doc('asks/'+me.id).onSnapshot(x=>{S.myAsks=x.exists?x.data().list||[]:[];rr()},err))}}
     S.me=me||null;if(S.fin){S.emps.forEach(e=>{if(e.email&&e.email!==cleanEmail(e.email))db.doc('employees/'+e.id).update({email:cleanEmail(e.email)}).catch(err)});syncTeamChat()}rr()},err);
+  if(S.mode==='app')db.collection('briefReq').where('done','==',false).onSnapshot(s=>{S.briefReqs=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>b.at-a.at);rr()},err);
   if(S.mode==='app')db.collection('asks').onSnapshot(s=>{S.asksAll=s.docs.map(d=>({id:d.id,...d.data()}));rr()},err);
   db.collection('calls/team/peers').onSnapshot(s=>{const was=liveCount();S.callPeers=s.docs.map(d=>({key:d.id,...d.data()}));const al=alivePeers();
     if(S.peersInit&&!CALL.key&&!was&&al.length){const first=al.slice().sort((a,b)=>(+a.joined||0)-(+b.joined||0))[0];if(first&&first.email!==S.email&&Date.now()-(+first.joined||0)<90000)startRing(first.name||'حد من التيم')}
@@ -388,7 +390,8 @@ function err(e){console.warn(e)}
 function subMonth(){
   Object.values(S.unsub).forEach(u=>u&&u());S.unsub={};S.recs=[];S.att={};S.asg={};S.distDraft={};S.ratings={};
   const m=S.month;
-  S.unsub.asg=db.collection('assign').where('month','==',m).onSnapshot(s=>{S.asg={};s.docs.forEach(d=>{const x=d.data();S.asg[x.clientId]=x});rr()},err);
+  S.unsub.asg=db.collection('assign').where('month','==',m).onSnapshot(s=>{S.asg={};s.docs.forEach(d=>{const x=d.data();S.asg[x.clientId]=x});if(s.docs.length&&!(S.mineSync??={})[m]){S.mineSync[m]=1;setTimeout(()=>{if(S.emps.length&&S.month===m)rebuildMine().catch(err)},4000)}rr()},err);
+  S.unsub.rep=db.collection('reports').where('month','==',m).onSnapshot(s=>{S.reps={};s.docs.forEach(d=>S.reps[d.id]={id:d.id,...d.data(SNAP)});rr()},err);
   S.unsub.sum=db.doc('summary/'+m).onSnapshot(s=>{S.sumOv=s.exists?s.data().rows||{}:{};rr()},err);
   S.unsub.stats=db.doc('stats/'+m).onSnapshot(s=>{S.stats=s.exists?s.data():{};rr()},err);
   S.unsub.mt=db.collection('tasks').where('date','>=',m+'-01').where('date','<=',m+'-31').onSnapshot(s=>{S.mTasks={};const dm={};s.docs.forEach(d=>{const x=d.data(),o=(S.mTasks[x.emp]??={done:0,all:0});(x.items||[]).forEach(i=>{o.all++;if(i.done){o.done++;if(i.id)dm[i.id]=1}})});S.doneM=dm;rr()},err);
@@ -492,6 +495,9 @@ function compute(){
     // التيم ليدر: أي يوم شغل عدّى من غير «إنهاء اليوم» قبل 11:59 بالليل بيتخصم يوم
     if(isTLx&&per>0){const AMw=attModel().work;for(const d of AMw){if(d>=today()||isFri(d)||off.has(d)||closedOk(d))continue;add(id,-per,{type:'noclose',date:d})}}
   }
+  // تقرير الشهر للكريتور: 10% من المرتب، بيتخصم بنسبة الأكونتات اللي تقريرها ماتبعتش قبل 12 بالليل آخر يوم
+  if(today()>monthEnd(S.month))for(const id of Object.keys(P)){const req=repReq(id,S.month);if(!req.length)continue;const miss=req.filter(cid=>!repOnTime(S.reps?.[repId(S.month,cid,id)])).length;
+    if(miss&&P[id].raw>0)add(id,-0.10*P[id].raw*miss/req.length,{type:'report',what:`تقرير الشهر ماتبعتش في ميعاده (${miss} من ${req.length} أكونت)`})}
   const R=+F.roundTo||0;let payroll=0;
   for(const p of Object.values(P)){const raw=Math.max(0,Math.round(p.raw*100)/100);p.total=R&&raw>0?Math.ceil(raw/R)*R:Math.round(raw);p.round=p.total-p.raw;payroll+=p.total}
   let extTotal=0;for(const x of Object.values(X)){x.total=Math.round(x.total);extTotal+=x.total}
@@ -508,8 +514,8 @@ function recPreview(r){
 }
 
 /* ---------- render ---------- */
-const TABS_FIN=[['home','الشهر'],['acc','الأكونتات'],['dist','التوزيع'],['att','المتابعة اليومية'],['sum','ملخص الشهر'],['free','فريلانس'],['pay','المرتبات'],['star','نجم الشهر'],['team','الفريق'],['site','الموقع'],['set','الإعدادات']];
-const TABS_TL=[['att','المتابعة اليومية'],['sum','ملخص الشهر'],['dist','التوزيع'],['rate','التقييم']];
+const TABS_FIN=[['home','الشهر'],['acc','العملاء'],['brief','الأكونتات'],['dist','التوزيع'],['att','المتابعة اليومية'],['sum','ملخص الشهر'],['free','فريلانس'],['pay','المرتبات'],['star','نجم الشهر'],['team','الفريق'],['site','الموقع'],['set','الإعدادات']];
+const TABS_TL=[['att','المتابعة اليومية'],['brief','الأكونتات'],['sum','ملخص الشهر'],['dist','التوزيع'],['rate','التقييم']];
 // بيانات صفحة العملاء (فيها صور تقيلة) بتتحمّل بس لما تفتح تبويب «الموقع»
 function ensureSite(){if(S.siteSub||!S.fin)return;S.siteSub=1;
   db.doc('site/main').onSnapshot(s=>{S.site=s.exists?s.data():{};rr()},err);
@@ -522,7 +528,7 @@ function render(){
   if(S.tab==='site')ensureSite();
   if(!S.started||S.mode==='screen')return;
   document.getElementById('mLabel').textContent=mName(S.month);
-  const askN=openAsks().length,meT=askN?`صفحتي (${askN})`:'صفحتي';const tabs=S.mode==='checkin'?[]:S.fin?[...TABS_FIN,['me',meT]]:[...TABS_TL,['me',meT]];const un=chatUnread();
+  const askN=openAsks().length,meT=askN?`صفحتي (${askN})`:'صفحتي';const brN=(S.briefReqs||[]).filter(x=>!x.done).length;const tabs=(S.mode==='checkin'?[]:S.fin?[...TABS_FIN,['me',meT]]:[...TABS_TL,['me',meT]]).map(([k,n])=>k==='brief'&&brN?[k,`${n} (${brN})`]:[k,n]);const un=chatUnread();
   document.getElementById('tabs').hidden=!tabs.length||S.tab==='chat';
   if(S.tab!=='chat'&&tabs.length&&!tabs.some(t=>t[0]===S.tab))S.tab=tabs[0][0];
   paintFab(un);
@@ -533,7 +539,7 @@ function render(){
   const a=document.activeElement,qa=a&&a.id==='qa_name'&&!a.value;
   if(a&&main.contains(a)&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)&&!qa)return;
   if(S.edit&&S.edit.kind==='view')sheetView(S.edit.id,true);
-  main.innerHTML=({sum:vSum,home:vHome,acc:vAcc,dist:vDist,team:vTeam,att:vAtt,tasks:vTasks,pay:vPay,star:vStar,site:vSite,free:vFree,rate:vRate,set:vSet,me:vCheckin,chat:vChat}[S.tab]||vCheckin)();
+  main.innerHTML=({brief:vBriefs,sum:vSum,home:vHome,acc:vAcc,dist:vDist,team:vTeam,att:vAtt,tasks:vTasks,pay:vPay,star:vStar,site:vSite,free:vFree,rate:vRate,set:vSet,me:vCheckin,chat:vChat}[S.tab]||vCheckin)();
   if(S.tab==='chat')paintChat(true);
   if(qa)document.getElementById('qa_name')?.focus();
 }
@@ -561,6 +567,70 @@ function modPanel(p){const cr=curRound(),mr=p.mr||{},done=MR.filter(r=>mr[r]).le
    <p class="small muted" style="margin:0">مهمتك الثابتة: تتابع الكومنتس والرسايل طول اليوم من 12 الضهر لـ 10 بالليل. كل ساعتين هيوصلك إشعار، رد على كل حاجة جديدة ودوس الزرار ده.</p>
    <div style="display:flex;gap:4px;flex-wrap:wrap">${mrChips(mr,today())}</div>
    ${cr==null?'<div class="small muted">أول جولة الساعة 12 الضهر.</div>':mr[cr]?`<div class="pill paid" style="text-align:center;padding:10px">جولة ${mrLbl(cr)} اتسجّلت ✓ · الجاية ${cr<22?mrLbl(cr+2):'بكرة 12 الضهر'}</div>`:`<button class="btn primary" data-act="modRound" data-r="${cr}" style="justify-content:center;padding:12px;font-size:16px">رديت على الكومنتس والرسايل ✓ · جولة ${mrLbl(cr)}</button>`}</div>`}
+/* ---------- البريف وتقرير الشهر ---------- */
+const BRIEF_Q=[['sells','بيبيع إيه؟'],['offers','بيقدّم إيه بالظبط؟ (المنتجات / الخدمات / الأسعار)'],['location','مكانه فين؟ (الفروع / العنوان)'],['target','التارجت بتاعه مين؟'],['adv','ميزاته التنافسية'],['weak','عيوبه ونقاط ضعفه'],['competitors','المنافسين'],['tone','الهوية وطريقة الكلام (الألوان، الستايل، اللهجة)'],['owner','اسم العميل'],['phone','رقم العميل'],['links','لينكات صفحاته'],['insights','الإنسايتس وقت ما خدنا البيدج'],['followers','عدد الفولورز وقت ما خدنا البيدج'],['startDate','تاريخ ما خدنا البيدج'],['notes','ملاحظات تانية']];
+const REP_N=[['followers','الفولورز آخر الشهر'],['reach','الوصول (Reach)'],['engagement','التفاعل (Engagement)']];
+const REP_Q=[['results','نتايج البيدج الشهر ده'],['best','أحسن محتوى نجح الشهر ده وليه'],['problems','المشاكل اللي واجهتك'],['challenges','التحديات اللي عملتها وإزاي اتعاملت معاها'],['next','اقتراحاتك للشهر الجاي']];
+const monthEnd=m=>{const[y,mo]=m.split('-').map(Number);return m+'-'+String(new Date(y,mo,0).getDate()).padStart(2,'0')};
+const repId=(m,cid,eid)=>`${m}_${cid}_${eid}`;
+const repOnTime=r=>{if(!r||r.status!=='sent')return false;const t=r.firstSentAt?.toDate?r.firstSentAt.toDate():r.firstSentMs?new Date(r.firstSentMs):null;if(!t)return false;const[y,mo]=r.month.split('-').map(Number);return t<=new Date(y,mo,0,23,59,59,999)};
+// الأكونتات اللي الكريتور مطلوب منه تقريرها في الشهر
+const repReq=(eid,m)=>Object.values(S.asg||{}).filter(a=>a.month===m&&(a.creator||[]).some(x=>x.e===eid)).map(a=>a.clientId);
+function repDue(e,acc,m){const cr=acc.filter(a=>a.cid&&a.r==='كريتور');if(!cr.length)return '';const last=today()===monthEnd(m),left=cr.filter(a=>S.myReps?.[repId(m,a.cid,e.id)]?.status!=='sent');
+  if(!last&&!left.length)return '';if(!last)return '';
+  return `<div class="panel" style="border-color:var(--accent);background:var(--accent-soft)"><div class="row between"><h3>📝 تقرير الشهر · النهارده آخر يوم</h3><span class="pill ${left.length?'red':'paid'}">${cr.length-left.length} من ${cr.length}</span></div>
+   <p class="small" style="margin:4px 0 8px">مهمة إجباري: لازم تبعت تقرير كل أكونت قبل الساعة 12 بالليل. عليه 10% من المرتب وبيدخل في تقييم نجم الشهر.</p>
+   <div class="list">${cr.map(a=>{const ok=S.myReps?.[repId(m,a.cid,e.id)]?.status==='sent';return `<div class="item"><b class="grow">${h(a.c)}</b>${ok?'<span class="pill paid">اتبعت ✓</span>':`<button class="btn sm primary" data-act="repOpen" data-c="${a.cid}" data-n="${h(a.c)}">اكتب التقرير</button>`}</div>`}).join('')}</div></div>`}
+const paperHead=(title,sub)=>`<div class="paper-h"><div><img src="${LOGO}" alt="Pensell"><div class="lbl" style="margin-top:6px">${title}</div></div><div class="meta">${sub}</div></div>`;
+const briefBody=B=>BRIEF_Q.filter(([k])=>B?.[k]).map(([k,l])=>`<div style="padding:10px 0;border-bottom:1px solid #EEE8E8"><div class="lbl">${l}</div><div style="white-space:pre-wrap;overflow-wrap:anywhere;color:#231E1F;margin-top:2px">${k==='phone'?`<a href="tel:${h(B[k])}" dir="ltr">${h(B[k])}</a>`:linkify(B[k])}</div></div>`).join('')||'<p class="small" style="color:#7A7072">لسه البريف ماتكتبش.</p>';
+async function briefView(cid,name){openSheet(`<div class="empty"><h3>بيحمّل البريف…</h3></div>`);let B=null;try{const d=await db.doc('briefs/'+cid).get();B=d.exists?d.data():null}catch(e){console.warn(e)}
+  S.edit={kind:'briefv',cid,name};
+  openSheet(`<div class="sheet-h"><h3>بريف ${h(name)}</h3><button class="x" data-act="close" aria-label="قفل">✕</button></div>
+   <div class="paper">${paperHead('بريف الأكونت',`<b>${h(name)}</b>${B?.updatedAt?.toDate?'<br>آخر تحديث '+dLong(B.updatedAt.toDate().toISOString().slice(0,10)):''}`)}<div class="paper-b">${briefBody(B)}</div></div>
+   <div class="panel stack" style="gap:8px;margin-top:12px"><h3>طلب تعديل</h3><p class="small muted" style="margin:0">لو فيه معلومة غلط أو ناقصة، اختارها واكتب التعديل، وهتوصل للتيم ليدر.</p>
+    <select id="br_f"><option value="">المعلومة</option>${BRIEF_Q.map(([k,l])=>`<option value="${k}">${l}</option>`).join('')}</select>
+    <textarea id="br_t" rows="3" placeholder="اكتب التعديل المطلوب"></textarea>
+    <div><button class="btn primary" data-act="briefReq">ابعت طلب التعديل</button></div></div>`)}
+function repSheet(){const E=S.edit,X=E.data,sent=X.status==='sent',when=X.sentAt?.toDate?X.sentAt.toDate():X.sentMs?new Date(X.sentMs):null,last=monthEnd(E.m);
+  openSheet(`<div class="sheet-h"><h3>تقرير ${mName(E.m)} · ${h(E.name)}</h3><button class="x" data-act="close" aria-label="قفل">✕</button></div>
+   <div class="stack" style="gap:10px">
+   ${sent?`<div class="notice" style="background:var(--good-soft)">اتبعت ✓${when&&!isNaN(when)?' يوم '+dLong(when.toISOString().slice(0,10))+' الساعة '+hm(when):''}. تقدر تعدّل وتبعته تاني لحد آخر الشهر.</div>`:`<div class="notice">التقرير مفتوح طول الشهر، ولازم يتبعت قبل 12 بالليل يوم ${dLong(last)}. عليه 10% من المرتب.</div>`}
+   <div class="grid3">${REP_N.map(([k,l])=>`<div class="field"><label class="label" for="rp_${k}">${l}</label><input id="rp_${k}" inputmode="numeric" value="${h(X.nums?.[k]||'')}"></div>`).join('')}</div>
+   ${REP_Q.map(([k,l])=>`<div class="field"><label class="label" for="rq_${k}">${l}</label><textarea id="rq_${k}" rows="3">${h(X.ans?.[k]||'')}</textarea></div>`).join('')}
+   <div class="field"><span class="label">سكرين الإنسايتس (لحد 4 صور)</span>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px">${(X.imgs||[]).map((u,i)=>`<div style="position:relative"><img src="${u}" alt="سكرين ${i+1}" style="width:100%;border-radius:8px;border:1px solid var(--line)"><button class="x" data-act="repImgRm" data-i="${i}" style="position:absolute;top:4px;left:4px;width:26px;height:26px;font-size:14px" aria-label="شيل">✕</button></div>`).join('')}</div>
+    ${(X.imgs||[]).length<4?`<input type="file" id="rep_file" accept="image/*" multiple>`:''}<div id="rep_up" class="small muted"></div></div>
+   <div class="row"><button class="btn" data-act="repSave" data-s="draft">حفظ مسودة</button><button class="btn primary" data-act="repSave" data-s="sent">${sent?'تحديث وإرسال':'إرسال التقرير'}</button></div></div>`)}
+function readRep(){const X=S.edit.data;X.nums={};REP_N.forEach(([k])=>{const v=document.getElementById('rp_'+k)?.value.trim();if(v)X.nums[k]=v});X.ans={};REP_Q.forEach(([k])=>{const v=document.getElementById('rq_'+k)?.value.trim();if(v)X.ans[k]=v})}
+async function repOpen(cid,name){if(!S.me)return;const m=today().slice(0,7),id=repId(m,cid,S.me.id);openSheet(`<div class="empty"><h3>بيحمّل…</h3></div>`);
+  let X=S.myReps?.[id];if(!X){try{const d=await db.doc('reports/'+id).get();X=d.exists?d.data():null}catch(e){console.warn(e)}}
+  S.edit={kind:'rep',id,cid,name,m,data:JSON.parse(JSON.stringify({...(X||{}),sentAt:null,firstSentAt:null})),raw:X};if(X?.sentAt)S.edit.data.sentAt=X.sentAt;repSheet()}
+function shrinkShot(file){return new Promise((ok,no)=>{const r=new FileReader();r.onerror=no;r.onload=()=>{const im=new Image();im.onerror=no;im.onload=()=>{let W=im.naturalWidth,H=im.naturalHeight,max=900;if(W>max){H=Math.round(H*max/W);W=max}if(H>1600){W=Math.round(W*1600/H);H=1600}
+  const cv=document.createElement('canvas');cv.width=W;cv.height=H;cv.getContext('2d').drawImage(im,0,0,W,H);let q=.75,d=cv.toDataURL('image/jpeg',q);while(d.length>190000&&q>.35){q-=.1;d=cv.toDataURL('image/jpeg',q)}ok(d)};im.src=r.result};r.readAsDataURL(file)})}
+const repPaper=(r,cname)=>`<div class="paper" id="repPaper_${r.id}">${paperHead('تقرير الشهر',`<b>${h(cname)}</b><br>${mName(r.month)}<br>${h(r.name||'')}`)}
+  <div class="paper-b">${REP_N.some(([k])=>r.nums?.[k])?`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px">${REP_N.map(([k,l])=>`<div style="background:#F6F4F4;border-radius:10px;padding:8px;text-align:center"><div class="lbl">${l}</div><b class="num" style="font-size:17px;color:#231E1F">${h(r.nums?.[k]||'—')}</b></div>`).join('')}</div>`:''}
+  ${REP_Q.filter(([k])=>r.ans?.[k]).map(([k,l])=>`<div style="padding:10px 0;border-bottom:1px solid #EEE8E8"><div class="lbl">${l}</div><div style="white-space:pre-wrap;overflow-wrap:anywhere;color:#231E1F;margin-top:2px">${linkify(r.ans[k])}</div></div>`).join('')}
+  ${(r.imgs||[]).map(u=>`<img src="${u}" alt="سكرين الإنسايتس" style="width:100%;border-radius:8px;margin-top:10px;border:1px solid #EEE8E8">`).join('')}</div></div>`;
+const repText=(r,cname)=>`تقرير ${mName(r.month)} · ${cname}\nمن ${S.cfg.company||'Pensell'}\n\n`+REP_N.filter(([k])=>r.nums?.[k]).map(([k,l])=>`• ${l}: ${r.nums[k]}`).join('\n')+'\n\n'+REP_Q.filter(([k])=>r.ans?.[k]).map(([k,l])=>`*${l}*\n${r.ans[k]}`).join('\n\n');
+let briefsSub=0;function ensureBriefs(){if(briefsSub)return;briefsSub=1;db.collection('briefs').onSnapshot(s=>{S.briefs={};s.docs.forEach(d=>S.briefs[d.id]=d.data());rr()},err)}
+function vBriefs(){ensureBriefs();const cl=S.clients.filter(c=>c.active!==false),RQ=(S.briefReqs||[]).filter(x=>!x.done);
+  if(!cl.length)return `<div class="panel empty"><h3>مفيش أكونتات لسه</h3><p>ضيف العملاء من تبويب «العملاء».</p></div>`;
+  return `<div class="stack"><h2>الأكونتات · ${mName(S.month)}</h2>
+  ${RQ.length?`<div class="panel" style="border-color:var(--accent)"><h3>✏️ طلبات تعديل البريف</h3><div class="list" style="margin-top:6px">${RQ.map(x=>`<div class="item" style="align-items:flex-start"><div class="grow" style="min-width:0"><b>${h(x.cname||clName(x.cid))}</b> <span class="small muted">· ${h(x.name)} · ${atTxt(x.at)}</span><div class="small" style="margin-top:2px"><span class="pkg">${h(x.label||'')}</span> ${h(x.text)}</div></div><div class="row" style="gap:4px"><button class="btn xs" data-act="briefEdit" data-c="${x.cid}">افتح البريف</button><button class="btn xs" data-act="briefReqDone" data-id="${x.id}">تمام ✓</button></div></div>`).join('')}</div></div>`:''}
+  <div class="panel"><div class="list">${cl.map(c=>{const B=S.briefs?.[c.id],filled=B?BRIEF_Q.filter(([k])=>B[k]).length:0,req=Object.values(S.asg||{}).find(a=>a.clientId===c.id&&a.month===S.month),crs=(req?.creator||[]).map(x=>x.e).filter(Boolean),sent=crs.filter(eid=>S.reps?.[repId(S.month,c.id,eid)]?.status==='sent').length,phone=waPhone(B?.phone||c.phone),rq=RQ.filter(x=>x.cid===c.id).length;
+    return `<div class="item" style="flex-wrap:wrap"><div class="grow" style="min-width:150px"><b>${h(c.name)}</b><div class="small muted">بريف ${filled} من ${BRIEF_Q.length}${crs.length?` · تقرير ${sent} من ${crs.length}`:''}${rq?` · <span style="color:var(--accent)">${rq} طلب تعديل</span>`:''}</div></div>
+     <div class="row" style="gap:4px"><button class="btn xs" data-act="briefEdit" data-c="${c.id}">بريف</button><button class="btn xs" data-act="repView" data-c="${c.id}">تقرير الشهر</button>${phone?`<a class="btn xs good" href="https://wa.me/${phone}" target="_blank" rel="noopener">واتساب</a>`:`<button class="btn xs" data-act="briefEdit" data-c="${c.id}" title="ضيف رقم العميل في البريف">واتساب</button>`}</div></div>`}).join('')}</div></div></div>`}
+function briefEdit(cid){ensureBriefs();const c=cli(cid),B=S.briefs?.[cid]||{},RQ=(S.briefReqs||[]).filter(x=>x.cid===cid&&!x.done);S.edit={kind:'brief',cid};
+  openSheet(`<div class="sheet-h"><h3>بريف ${h(c?.name||'')}</h3><button class="x" data-act="close" aria-label="قفل">✕</button></div>
+   ${RQ.length?`<div class="panel" style="border-color:var(--accent);margin-bottom:12px"><h3>طلبات تعديل من التيم</h3>${RQ.map(x=>`<div class="item" style="align-items:flex-start"><div class="grow small"><b>${h(x.name)}</b> · <span class="pkg">${h(x.label||'')}</span><div>${h(x.text)}</div></div><button class="btn xs" data-act="briefReqDone" data-id="${x.id}">تمام ✓</button></div>`).join('')}</div>`:''}
+   <div class="stack" style="gap:10px">${BRIEF_Q.map(([k,l])=>`<div class="field"><label class="label" for="bf_${k}">${l}</label>${['owner','phone','followers','startDate'].includes(k)?`<input id="bf_${k}" ${k==='phone'?'inputmode="tel" dir="ltr"':''} ${k==='startDate'?'type="date"':''} value="${h(B[k]??(k==='owner'?c?.contact||'':k==='phone'?c?.phone||'':''))}">`:`<textarea id="bf_${k}" rows="${k==='links'||k==='insights'?3:2}">${h(B[k]||'')}</textarea>`}</div>`).join('')}
+   <div><button class="btn primary" data-act="briefSave">حفظ البريف</button></div></div>`)}
+function repView(cid){const c=cli(cid),L=Object.values(S.reps||{}).filter(r=>r.cid===cid&&r.month===S.month),req=Object.values(S.asg||{}).find(a=>a.clientId===cid&&a.month===S.month),crs=(req?.creator||[]).map(x=>x.e).filter(Boolean);
+  const phone=waPhone(S.briefs?.[cid]?.phone||c?.phone);S.edit={kind:'repv',cid};
+  openSheet(`<div class="sheet-h"><h3>تقرير ${mName(S.month)} · ${h(c?.name||'')}</h3><button class="x" data-act="close" aria-label="قفل">✕</button></div>
+   <div class="stack" style="gap:14px">${crs.filter(eid=>!L.some(r=>r.emp===eid&&r.status==='sent')).map(eid=>`<div class="notice">${h(emp(eid)?.name||'')} لسه مابعتش التقرير${L.some(r=>r.emp===eid)?' (فيه مسودة)':''}. آخر ميعاد 12 بالليل يوم ${dLong(monthEnd(S.month))}.</div>`).join('')}
+   ${L.filter(r=>r.status==='sent').map(r=>`<div class="stack" style="gap:8px"><div class="small ${repOnTime(r)?'':'minus'}">${h(r.name||'')} · ${repOnTime(r)?'اتبعت في ميعاده ✓':'اتبعت متأخر'}</div>${repPaper(r,c?.name||'')}
+     <div class="row"><a class="btn good" href="https://wa.me/${phone}?text=${encodeURIComponent(repText(r,c?.name||''))}" target="_blank" rel="noopener">إرسال للعميل واتساب</a><button class="btn" data-act="repPdf" data-id="${r.id}">PDF</button></div></div>`).join('')||(crs.length?'':'<p class="small muted">مفيش كريتور متوزع على الأكونت ده الشهر ده.</p>')}</div>`)}
 function askBox(){const mine=(S.myAsks||[]).slice(-3).reverse();
   return `<div class="panel stack" style="gap:8px"><h3>فيه حاجة واقفة معاك؟</h3>
    <textarea id="ask_t" rows="3" placeholder="لو فيه حاجة واقفة معاك، لو محتاج ميتنج / تصوير / طلب إجازة / استئذان بدري… اكتب هنا"></textarea>
@@ -594,11 +664,12 @@ function vCheckin(){
     ${btn}<p class="small muted" style="margin:0">الوقت بيتسجّل من السيرفر، مش من الموبايل.</p></div>
    ${notifBanner()}
    ${T?.msg?`<div class="panel" style="border-color:var(--accent);background:var(--accent-soft)"><div class="label" style="color:var(--accent)">رسالة ليك${T.byName?' من '+h(T.byName):''}</div><div style="white-space:pre-wrap;margin-top:4px">${h(T.msg)}</div></div>`:''}
+   ${repDue(e,acc,m)}
    <div class="panel"><div class="row between"><h3>مهام النهارده</h3>${items.length?`<span class="pill ${doneN===items.length?'paid':'unpaid'}">${doneN} من ${items.length}</span>`:''}</div>
     ${items.length?`<div class="list" style="margin-top:6px">${items.map((x,i)=>`<label class="item" style="cursor:pointer;gap:10px;align-items:flex-start"><input type="checkbox" data-act="taskDone" data-i="${i}" ${x.done?'checked':''} style="margin-top:4px"><span class="grow" style="min-width:0"><span style="${x.done?'text-decoration:line-through;color:var(--muted)':''}">${h(x.t)}</span>${x.link?`<div class="small" style="overflow-wrap:anywhere"><a href="${h(x.link)}" target="_blank" rel="noopener" dir="ltr">${h(x.link)}</a></div>`:''}${x.note?`<div class="small muted" style="white-space:pre-wrap;overflow-wrap:anywhere">${linkify(x.note)}</div>`:''}${x.ok===true?'<div class="small" style="color:var(--good)">التيم ليدر أكّد إنها تمت ✓</div>':x.ok===false&&x.byEmp?`<div class="small" style="color:var(--gold)">متمّتش بسبب تأخير من ${h(x.byEmp)}${x.why?' ('+h(x.why)+')':''} · مش هتتخصم منك</div>`:x.ok===false?`<div class="small" style="color:var(--bad)">التيم ليدر علّم إنها متمّتش${x.why?' · '+h(x.why):''}</div>`:''}</span></label>`).join('')}</div>`:'<p class="small muted" style="margin:6px 0 0">مفيش مهام متسجّلة ليك النهارده.</p>'}</div>
    ${has(e,'moderator')?modPanel(p):''}
    ${askBox()}
-   <div class="panel"><h3>أكونتاتك في ${mName(m)}</h3>${acc.length?`<div class="list" style="margin-top:6px">${acc.map(a=>`<div class="item"><b class="grow">${h(a.c)}</b><span class="pkg on">${h(a.r)}</span>${a.from>1||a.to?`<span class="small muted">من يوم ${a.from||1}${a.to?' لـ '+a.to:''}</span>`:''}</div>`).join('')}</div>`:'<p class="small muted" style="margin:6px 0 0">لسه مفيش أكونتات متوزعة عليك الشهر ده.</p>'}</div>
+   <div class="panel"><h3>أكونتاتك في ${mName(m)}</h3>${acc.length?`<div class="list" style="margin-top:6px">${acc.map(a=>{const rp=a.cid&&a.r==='كريتور'?S.myReps?.[repId(m,a.cid,e.id)]:null;return `<div class="item"><div class="grow" style="min-width:0"><b>${h(a.c)}</b> <span class="pkg on">${h(a.r)}</span>${a.from>1||a.to?` <span class="small muted">من يوم ${a.from||1}${a.to?' لـ '+a.to:''}</span>`:''}</div>${a.cid?`<div class="row" style="gap:4px"><button class="btn xs" data-act="briefView" data-c="${a.cid}" data-n="${h(a.c)}">بريف</button>${a.r==='كريتور'?`<button class="btn xs ${rp?.status==='sent'?'':'primary'}" data-act="repOpen" data-c="${a.cid}" data-n="${h(a.c)}">${rp?.status==='sent'?'تقرير الشهر ✓':'تقرير الشهر'}</button>`:''}</div>`:''}</div>`}).join('')}</div>`:'<p class="small muted" style="margin:6px 0 0">لسه مفيش أكونتات متوزعة عليك الشهر ده.</p>'}</div>
    <div class="panel"><h3>${mName(m)} · ${days.length} يوم</h3>${lates||soft?`<p class="small" style="margin:4px 0 0">${lates?`<span class="minus">${lates} تأخير عليه خصم</span>`:''}${lates&&soft?' · ':''}${soft?`${soft} تأخير ملاحظة`:''}</p>`:''}${days.length?`<div class="tbl" style="margin-top:8px"><table><thead><tr><th>اليوم</th><th>حضور</th><th>انصراف</th><th>مدة</th></tr></thead><tbody>${days.map(([k,x])=>`<tr><td>${dLong(k)}</td><td class="num">${x.in||'—'} ${lateKind(x.in)==='hard'?'<span class="minus">●</span>':lateKind(x.in)==='soft'?'<span style="color:var(--gold)">●</span>':''}</td><td class="num">${x.out||'—'}</td><td class="num">${dur(x.in,x.out)}</td></tr>`).join('')}</tbody></table></div>`:'<p class="small muted">لسه مفيش أيام متسجّلة الشهر ده.</p>'}</div></div>`;
 }
 /* ---------- التوزيع ---------- */
@@ -627,9 +698,9 @@ function vDist(){
 }
 async function rebuildMine(){
   const m=S.month,acc={};
-  for(const a of Object.values(S.asg)){if(a.month!==m)continue;const c=a.clientName||cli(a.clientId)?.name||'';const segs=a.creator||[];
-    segs.forEach((sg,i)=>{if(!sg.e)return;const to=i<segs.length-1?(+segs[i+1].from-1):null;(acc[sg.e]??=[]).push({c,r:'كريتور',from:+sg.from||1,to})});
-    if(a.designer)(acc[a.designer]??=[]).push({c,r:'ديزاينر'});if(a.moderator)(acc[a.moderator]??=[]).push({c,r:'موديريتور'})}
+  for(const a of Object.values(S.asg)){if(a.month!==m)continue;const c=a.clientName||cli(a.clientId)?.name||'';const segs=a.creator||[],cid=a.clientId;
+    segs.forEach((sg,i)=>{if(!sg.e)return;const to=i<segs.length-1?(+segs[i+1].from-1):null;(acc[sg.e]??=[]).push({c,cid,r:'كريتور',from:+sg.from||1,to})});
+    if(a.designer)(acc[a.designer]??=[]).push({c,cid,r:'ديزاينر'});if(a.moderator)(acc[a.moderator]??=[]).push({c,cid,r:'موديريتور'})}
   const bt=db.batch();S.emps.forEach(e=>bt.set(db.doc('mine/'+e.id),{byMonth:{[m]:acc[e.id]||[]}},{merge:true}));await bt.commit();
 }
 /* ---------- المهام ---------- */
@@ -748,9 +819,9 @@ async function pushSync(){if(!S.me||!S.email||!auth.currentUser||!await remReady
   const j=JSON.stringify(body);if(j===pushSyncJ)return;
   const t=await auth.currentUser.getIdToken();const r=await fetch(pushUrl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...body,idToken:t})});if(r.ok)pushSyncJ=j}catch(_){}}
 async function pushTasks(list){if(!list.length||!auth.currentUser||!await remReady())return;auth.currentUser.getIdToken().then(t=>fetch(pushUrl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'tasks',idToken:t,list})})).catch(()=>{})}
-async function pushAsk(text){if(!auth.currentUser||!await remReady())return;try{const t=await auth.currentUser.getIdToken();fetch(pushUrl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'ask',idToken:t,text})}).catch(()=>{})}catch(_){}}
+async function pushAsk(text,kind){if(!auth.currentUser||!await remReady())return;try{const t=await auth.currentUser.getIdToken();fetch(pushUrl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'ask',idToken:t,text,kind:kind||''})}).catch(()=>{})}catch(_){}}
 function pushNotify(chatId,kind,text){try{auth.currentUser.getIdToken().then(t=>fetch(pushUrl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({idToken:t,chatId,kind,text})})).catch(()=>{})}catch(_){}}
-async function localNotify(title,body,tag,url,call){if(notifPerm()!=='granted')return;try{const reg=await navigator.serviceWorker.ready;reg.showNotification(title,{body,tag,renotify:true,icon:'/icon-192.png',badge:'/icon-192.png',data:{url},vibrate:call?[600,300,600,300,600]:[200,100,200],requireInteraction:!!call})}catch(_){}}
+async function localNotify(title,body,tag,url,call){if(notifPerm()!=='granted')return;try{const reg=await navigator.serviceWorker.ready;reg.showNotification(title,{body,tag,renotify:true,icon:'/icon-192.png',badge:'/icon-192.png',data:{url},vibrate:call?[1000,400,1000,400,1000,400,1000]:[250,100,250,100,500],requireInteraction:!!call})}catch(_){}}
 // رسايل جديدة: إشعار لو التطبيق في الخلفية، وتنبيه صغير لو مفتوح
 function onChatsUpdate(){const seen=S.lastSeenAt||(S.lastSeenAt={}),first=!S.chatsSeenInit;S.chatsSeenInit=1;
   for(const c of S.chats||[]){const t=tsMs(c.last?.at);if(first||!t){seen[c.id]=Math.max(seen[c.id]||0,t);continue}if(t<=(seen[c.id]||0))continue;seen[c.id]=t;
@@ -763,10 +834,15 @@ function openFromHash(hsh){if(!hsh)return;if(hsh==='#me'){if(S.mode==='app'){S.t
 // صوت الرنّة (بيتعمل بالكود، مش ملف)
 let AC=null;const audioCtx=()=>{try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();if(AC.state==='suspended')AC.resume();return AC}catch(_){return null}};
 addEventListener('pointerdown',()=>audioCtx(),{once:true,capture:true});
-function tone(f,t0,d,vol){const a=audioCtx();if(!a)return;const o=a.createOscillator(),g=a.createGain();o.frequency.value=f;o.type='sine';g.gain.setValueAtTime(0,a.currentTime+t0);g.gain.linearRampToValueAtTime(vol,a.currentTime+t0+.02);g.gain.setValueAtTime(vol,a.currentTime+t0+d-.05);g.gain.linearRampToValueAtTime(0,a.currentTime+t0+d);o.connect(g).connect(a.destination);o.start(a.currentTime+t0);o.stop(a.currentTime+t0+d+.05)}
-function beep(){tone(880,0,.12,.15);tone(1320,.14,.12,.12)}
-function ringOnce(){[0,.45].forEach(t=>{tone(523,t,.35,.25);tone(659,t,.35,.18)});try{navigator.vibrate?.([400,200,400])}catch(_){}}
-function startRing(name){if(S.ringing)return;S.ringing={name,until:Date.now()+35000};ringOnce();S.ringT=setInterval(()=>{if(!S.ringing||Date.now()>S.ringing.until||CALL.key||!liveCount())return stopRing();ringOnce()},2200);paintRing();
+function tone(f,t0,d,vol,type){const a=audioCtx();if(!a)return;const o=a.createOscillator(),g=a.createGain();o.frequency.value=f;o.type=type||'sine';g.gain.setValueAtTime(0,a.currentTime+t0);g.gain.linearRampToValueAtTime(vol,a.currentTime+t0+.02);g.gain.setValueAtTime(vol,a.currentTime+t0+d-.05);g.gain.linearRampToValueAtTime(0,a.currentTime+t0+d);o.connect(g).connect(a.destination);o.start(a.currentTime+t0);o.stop(a.currentTime+t0+d+.05)}
+// صوت الرسالة: 3 نغمات واضحة
+function beep(){[[1046,0],[1318,.12],[1568,.24]].forEach(([f,t])=>{tone(f,t,.16,.32,'triangle');tone(f*2,t,.12,.06)});try{navigator.vibrate?.([120,60,120])}catch(_){}}
+// رنة المكالمة: زي رنة التليفون (ترِل متقطع) وبتفضل ترن
+function trill(t0,dur,vol){const a=audioCtx();if(!a)return;const o=a.createOscillator(),o2=a.createOscillator(),g=a.createGain(),T=a.currentTime+t0;o.type='triangle';o2.type='sine';
+  for(let i=0;i*0.045<dur;i++){const tt=T+i*0.045,hi=i%2;o.frequency.setValueAtTime(hi?1320:1060,tt);o2.frequency.setValueAtTime(hi?660:530,tt)}
+  g.gain.setValueAtTime(0,T);g.gain.linearRampToValueAtTime(vol,T+.02);g.gain.setValueAtTime(vol,T+dur-.04);g.gain.linearRampToValueAtTime(0,T+dur);o.connect(g);o2.connect(g);g.connect(a.destination);o.start(T);o2.start(T);o.stop(T+dur+.05);o2.stop(T+dur+.05)}
+function ringOnce(){trill(0,1,.35);trill(1.25,1,.35);try{navigator.vibrate?.([1000,250,1000])}catch(_){}}
+function startRing(name){if(S.ringing)return;S.ringing={name,until:Date.now()+45000};ringOnce();S.ringT=setInterval(()=>{if(!S.ringing||Date.now()>S.ringing.until||CALL.key||!liveCount())return stopRing();ringOnce()},3600);paintRing();
   if(document.hidden)localNotify('📞 مكالمة جماعية',`${name} بيتصل بالتيم · دوس علشان تنضم`,'call','/app.html#call',true)}
 function stopRing(){clearInterval(S.ringT);S.ringing=null;paintRing()}
 function paintRing(){let el=document.getElementById('ringScreen');if(!S.ringing){el?.remove();return}
@@ -941,11 +1017,12 @@ function starRank(){
   const cov={};for(const dd of Object.values(S.att))for(const r of Object.values(dd.rows||{}))if(r.cover&&r.s!=='present')cov[r.cover]=(cov[r.cover]||0)+1;
   const maxCov=Math.max(0,...Object.values(cov)),rt=S.ratings||{};
   return rows.map(R=>{const e=R.e,E=R.eff,W=(E.present+E.absent)||M.days||1;
-    const attR=Math.max(0,Math.min(1,(E.present-0.25*R.hard-0.1*R.soft)/W)),att=25*attR;
+    const attR=Math.max(0,Math.min(1,(E.present-0.25*R.hard-0.1*R.soft)/W)),att=20*attR;
+    const rq=repReq(e.id,S.month),rep=10*(rq.length?rq.filter(cid=>repOnTime(S.reps?.[repId(S.month,cid,e.id)])).length/rq.length:attR);
     const keys=[...new Set([...rolesOf(e).map(k=>meas[k]).filter(Boolean),'tasks','other'])].filter(k=>mx[k]>0);
     const prod=15*(keys.length?keys.reduce((a,k)=>a+E[k]/mx[k],0)/keys.length:attR);
-    const cv=maxCov?10*(cov[e.id]||0)/maxCov:0,tr=+rt.tl?.[e.id]||0,orr=+rt.owner?.[e.id]||0;
-    return{e,present:E.present,absent:E.absent,hard:R.hard,soft:R.soft,cov:cov[e.id]||0,att,prod,cv,tr,orr,total:att+prod+cv+25*tr/5+25*orr/5};
+    const cv=maxCov?5*(cov[e.id]||0)/maxCov:0,tr=+rt.tl?.[e.id]||0,orr=+rt.owner?.[e.id]||0;
+    return{e,present:E.present,absent:E.absent,hard:R.hard,soft:R.soft,cov:cov[e.id]||0,att,prod,cv,rep,tr,orr,total:att+prod+cv+rep+25*tr/5+25*orr/5};
   }).sort((a,b)=>b.total-a.total);
 }
 const stars=(id,val,dis)=>`<select id="${id}" ${dis?'disabled':''} style="width:auto"><option value="">—</option>${[1,2,3,4,5].map(x=>`<option value="${x}" ${+val===x?'selected':''}>${'★'.repeat(x)}</option>`).join('')}</select>`;
@@ -953,11 +1030,11 @@ function vStar(){
   const L=starRank(),top=L[0],ms=S.monthStar,noTl=L.filter(x=>!x.tr).length,noOw=L.filter(x=>!x.orr).length;
   return `<div class="stack"><h2>نجم ${mName(S.month)}</h2>
   ${ms?`<div class="panel row between" style="border-color:var(--accent)"><div><div class="label">اتعلن</div><b style="font-size:18px">⭐ ${h(ms.name)}</b></div><span class="small muted">الموظفين شايفينه في صفحتهم</span></div>`:''}
-  <p class="small muted" style="margin:0">التقييم من 100: حضور والتزام 25 · إنتاج 15 (من «ملخص الشهر»: بوستات، تصميمات، جلسات تصوير، فيديوهات، مهام، أخرى) · تغطية 10 · تقييم التيم ليدر 25 · تقييمك 25.</p>
+  <p class="small muted" style="margin:0">التقييم من 100: حضور والتزام 20 · إنتاج 15 (من «ملخص الشهر»: بوستات، تصميمات، جلسات تصوير، فيديوهات، مهام، أخرى) · تقرير الشهر 10 (للكريتور: اتبعت في ميعاده) · تغطية 5 · تقييم التيم ليدر 25 · تقييمك 25.</p>
   ${noTl||noOw?`<div class="notice">${noTl?`${noTl} موظف لسه التيم ليدر ماقيّمهمش. `:''}${noOw?`${noOw} موظف لسه انت ماقيّمتهمش.`:''}</div>`:''}
-  <div class="panel tbl"><table><thead><tr><th>#</th><th>الموظف</th><th>المجموع</th><th>حضور</th><th>إنتاج</th><th>تغطية</th><th>التيم ليدر</th><th>تقييمك</th></tr></thead><tbody>
+  <div class="panel tbl"><table><thead><tr><th>#</th><th>الموظف</th><th>المجموع</th><th>حضور</th><th>إنتاج</th><th>تقرير</th><th>تغطية</th><th>التيم ليدر</th><th>تقييمك</th></tr></thead><tbody>
   ${L.map((x,i)=>`<tr${i===0?' style="background:var(--accent-soft)"':''}><td class="num">${i+1}</td><td><b>${h(x.e.name)}</b><div class="small muted">${x.present} يوم${x.absent?` · غاب ${x.absent}`:''}${x.hard?` · اتأخر ${x.hard}`:''}${x.cov?` · غطّى ${x.cov}`:''}</div></td><td class="num"><b style="font-size:16px;color:var(--accent)">${Math.round(x.total)}</b></td>
-   <td class="num">${x.att.toFixed(1)}</td><td class="num">${x.prod.toFixed(1)}</td><td class="num">${x.cv.toFixed(1)}</td><td style="color:var(--gold)">${x.tr?'★'.repeat(x.tr):'—'}</td><td>${stars('or_'+x.e.id,x.orr)}</td></tr>`).join('')}</tbody></table></div>
+   <td class="num">${x.att.toFixed(1)}</td><td class="num">${x.prod.toFixed(1)}</td><td class="num">${x.rep.toFixed(1)}</td><td class="num">${x.cv.toFixed(1)}</td><td style="color:var(--gold)">${x.tr?'★'.repeat(x.tr):'—'}</td><td>${stars('or_'+x.e.id,x.orr)}</td></tr>`).join('')}</tbody></table></div>
   <div class="row"><button class="btn" data-act="saveOwnerRate">حفظ تقييمي</button>${top?`<button class="btn primary" data-act="announce" data-id="${top.e.id}">أعلن ${h(top.e.name)} نجم الشهر ⭐</button>`:''}</div>
   <div class="field"><label class="label" for="star_note">كلمة تظهر مع الإعلان (اختياري)</label><input id="star_note" placeholder="مثلاً: أعلى التزام وأكتر تغطية الشهر ده"></div></div>`;
 }
@@ -1139,6 +1216,7 @@ function vPay(){
      if(l.type==='daily')return `<tr><td>${h(l.what)}</td><td class="num">${money(l.share)}</td><td>—</td><td class="num">${money(l.amt)}</td></tr>`;
      if(l.type==='sumadj')return `<tr><td>${h(l.what)}</td><td></td><td class="num ${l.amt<0?'minus':''}">${l.amt<0?'−'+money(-l.amt):'—'}</td><td class="num ${l.amt<0?'minus':'plus'}">${l.amt<0?'−':'+'}${money(Math.abs(l.amt))}</td></tr>`;
      if(l.type==='absence')return `<tr><td>${l.s==='leave'?'إجازة':'غياب'} يوم <span class="num">${l.date.slice(8)}/${l.date.slice(5,7)}</span>${(l.covers||[]).length?`<div class="small muted">غطّى مكانه ${h(l.covers.map(x=>emp(x)?.name||'').join('، '))}</div>`:''}</td><td></td><td class="num minus">−${money(-l.amt)}</td><td class="num minus">−${money(-l.amt)}</td></tr>`;
+     if(l.type==='report')return `<tr><td>${h(l.what)}<div class="small muted">10% من المرتب على تقرير الشهر</div></td><td></td><td class="num minus">−${money(-l.amt)}</td><td class="num minus">−${money(-l.amt)}</td></tr>`;
      if(l.type==='noclose')return `<tr><td>ماقفلش المتابعة يوم <span class="num">${l.date.slice(8)}/${l.date.slice(5,7)}</span><div class="small muted">«إنهاء اليوم» ماتداسش قبل 11:59 بالليل</div></td><td></td><td class="num minus">−${money(-l.amt)}</td><td class="num minus">−${money(-l.amt)}</td></tr>`;
      if(l.type==='late')return `<tr><td>تأخير يوم <span class="num">${l.date.slice(8)}/${l.date.slice(5,7)}</span><div class="small muted">حضر <span class="num">${l.t}</span> · خصم ${C.lf*100}% من يوم</div></td><td></td><td class="num minus">−${money(-l.amt)}</td><td class="num minus">−${money(-l.amt)}</td></tr>`;
      if(l.type==='deliv')return `<tr><td>${l.kind} · ${h(l.client)}<div class="small muted">${l.n} ${l.kind}${l.tot!==l.n?` من ${l.tot}`:''} · الحد الأدنى ${l.target}</div></td><td class="num">${money(l.share)}</td><td class="num minus">${l.amt<l.share-0.5?'−'+money(l.share-l.amt):'—'}</td><td class="num">${money(l.amt)}</td></tr>`;
@@ -1421,6 +1499,8 @@ document.addEventListener('change',e=>{
   if(t.dataset.mod){(S.attDraft.mods[t.dataset.mod]??={s:'absent'}).cover=t.value||null}
   if(t.dataset.ad){const x=S.attDraft.ads?.[+t.dataset.i];if(x)x[t.dataset.ad]=t.dataset.ad==='amt'?(t.value===''?'':+t.value):t.value}
   if(t.id==='chat_img'&&t.files&&t.files[0]){shrinkChatImg(t.files[0]).then(d=>{S.chatImg=d;t.value='';paintChat();document.getElementById('chat_in')?.focus()}).catch(()=>toast('الصورة دي مش راضية تفتح'));return}
+  if(t.id==='rep_file'&&t.files?.length&&S.edit?.kind==='rep'){readRep();const X=S.edit.data;X.imgs=X.imgs||[];const fs=[...t.files].slice(0,4-X.imgs.length);document.getElementById('rep_up').textContent='بيجهّز الصور…';
+    Promise.all(fs.map(shrinkShot)).then(L=>{if(S.edit?.kind!=='rep')return;X.imgs.push(...L);repSheet()}).catch(()=>toast('ماقدرتش أقرا الصورة'));return}
   if(t.id==='b_file'&&t.files&&t.files[0]){document.getElementById('b_prev').innerHTML='<span class="small muted">بيجهّز اللوجو…</span>';shrinkLogo(t.files[0]).then(d=>{if(S.edit?.kind!=='brand')return;S.edit.img=d;document.getElementById('b_prev').innerHTML=`<img src="${d}" alt="" style="max-height:140px;background:#fff;border-radius:10px;padding:6px">`}).catch(()=>toast('الصورة دي مش راضية تفتح، جرّب صورة تانية'));return}
   if(t.id==='w_file'&&t.files&&t.files[0]){const f=t.files[0];document.getElementById('w_prev').innerHTML='<span class="small muted">بيجهّز الصورة…</span>';shrinkImage(f).then(d=>{if(S.edit?.kind!=='work')return;S.edit.img=d;document.getElementById('w_prev').innerHTML=`<img src="${d}" alt="" style="max-height:220px;border-radius:10px">`}).catch(()=>toast('الصورة دي مش راضية تفتح، جرّب صورة تانية'));return}
   if(t.id==='fr_c'){document.getElementById('fr_pw').hidden=!t.value}
@@ -1536,6 +1616,21 @@ document.addEventListener('click',async e=>{
     if(await save(()=>bt.commit(),`اتحفظ لـ ${k} موظف`))pushTasks(rem);b.disabled=false;return}
   if(a==='modRound'){if(!S.me)return;const r=+b.dataset.r;if(r!==curRound())return toast('الجولة دي خلصت، استنى الجاية');b.disabled=true;
     if(!await save(()=>db.doc('checkins/'+S.me.id).set({empId:S.me.id,log:{[today()]:{mr:{[r]:firebase.firestore.FieldValue.serverTimestamp()}}}},{merge:true}),'اتسجّلت ✓'))b.disabled=false;return}
+  if(a==='briefView'){briefView(b.dataset.c,b.dataset.n);return}
+  if(a==='briefReq'){const f=v('br_f'),t=v('br_t');if(!t)return toast('اكتب التعديل المطلوب');const E=S.edit;b.disabled=true;const label=(BRIEF_Q.find(x=>x[0]===f)||[,'عام'])[1];
+    if(await save(()=>db.collection('briefReq').doc().set({cid:E.cid,cname:E.name,field:f||'',label,text:t.slice(0,600),emp:S.me?.id||'',name:S.me?.name||'',email:S.email,at:Date.now(),done:false}),'طلب التعديل اتبعت للتيم ليدر ✓')){document.getElementById('br_t').value='';pushAsk(`${E.name} · ${label}: ${t}`,'brief')}b.disabled=false;return}
+  if(a==='repOpen'){repOpen(b.dataset.c,b.dataset.n);return}
+  if(a==='repImgRm'){readRep();S.edit.data.imgs.splice(+b.dataset.i,1);repSheet();return}
+  if(a==='repSave'){readRep();const E=S.edit,X=E.data,send=b.dataset.s==='sent';if(send&&!Object.keys(X.ans||{}).length&&!Object.keys(X.nums||{}).length)return toast('جاوب على الأسئلة الأول');b.disabled=true;
+    const doc={cid:E.cid,cname:E.name,month:E.m,emp:S.me.id,name:S.me.name||'',email:S.email,ans:X.ans||{},nums:X.nums||{},imgs:X.imgs||[],status:send?'sent':(E.raw?.status==='sent'?'sent':'draft'),updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
+    if(send){doc.sentAt=firebase.firestore.FieldValue.serverTimestamp();doc.sentMs=Date.now();if(!E.raw?.firstSentAt){doc.firstSentAt=firebase.firestore.FieldValue.serverTimestamp();doc.firstSentMs=Date.now()}}
+    if(await save(()=>db.doc('reports/'+E.id).set(doc,{merge:true}),send?'التقرير اتبعت ✓':'المسودة اتحفظت')){closeSheet()}else b.disabled=false;return}
+  if(a==='briefEdit'){briefEdit(b.dataset.c);return}
+  if(a==='briefSave'){const E=S.edit,d={cid:E.cid,updatedAt:firebase.firestore.FieldValue.serverTimestamp(),by:S.me?.name||(S.fin?'الإدارة':'التيم ليدر')};BRIEF_Q.forEach(([k])=>d[k]=v('bf_'+k));
+    if(await save(()=>db.doc('briefs/'+E.cid).set(d,{merge:true}),'البريف اتحفظ ✓'))closeSheet();return}
+  if(a==='briefReqDone'){await save(()=>db.doc('briefReq/'+b.dataset.id).update({done:true,doneBy:S.me?.name||(S.fin?'الإدارة':'التيم ليدر')}));if(S.edit?.kind==='brief')briefEdit(S.edit.cid);return}
+  if(a==='repView'){ensureBriefs();repView(b.dataset.c);return}
+  if(a==='repPdf'){const r=S.reps?.[b.dataset.id];b.disabled=true;const t=b.textContent;b.textContent='بيجهّز الـ PDF…';try{await invPdf(null,'repPaper_'+r.id,`تقرير ${(clName(r.cid)||r.cname||'').replace(/[\\/:*?"<>|]/g,'')} ${r.month}.pdf`)}catch(e){console.warn(e);toast('ماقدرتش أعمل PDF، جرّب تاني')}b.disabled=false;b.textContent=t;return}
   if(a==='sendAsk'){const t=v('ask_t');if(!t)return toast('اكتب اللي واقف معاك الأول');if(!S.me)return;b.disabled=true;
     const list=[...(S.myAsks||[]),{id:uid(),t:t.slice(0,600),at:Date.now(),done:false}].slice(-30);
     if(await save(()=>db.doc('asks/'+S.me.id).set({emp:S.me.id,name:S.me.name||'',list}),'اتبعتت للإدارة والتيم ليدر ✓')){S.myAsks=list;document.getElementById('ask_t').value='';pushAsk(t)}b.disabled=false;return}
