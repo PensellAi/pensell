@@ -429,7 +429,8 @@ function compute(){
   const [yy,mo]=S.month.split('-').map(Number), dim=new Date(yy,mo,0).getDate();
   const P={},X={},out={designs:{},sessions:{},videos:{},creatorDays:{},modAcc:{}};
   const inc=(o,k,n)=>{o[k]=(o[k]||0)+n};
-  const add=(id,amt,line)=>{if(isExt(id)){if(!amt)return 0;const k=id.slice(4);(X[k]??={total:0,lines:[]});X[k].total+=amt;X[k].lines.push({...line,amt});return amt}
+  let curAcc=null;// كل بند بيتسجّل على الأكونت بتاعه علشان المرتب يتجمّع بالأكونت
+  const add=(id,amt,line)=>{if(curAcc&&line.acc===undefined&&line.type!=='cover')line={...line,acc:curAcc};if(isExt(id)){if(!amt)return 0;const k=id.slice(4);(X[k]??={total:0,lines:[]});X[k].total+=amt;X[k].lines.push({...line,amt});return amt}
     if(!emp(id))return 0;if(!amt&&line.type!=='design'&&line.type!=='deliv')return 0;(P[id]??={raw:0,lines:[]});P[id].raw+=amt;P[id].lines.push({...line,amt});return amt};
   let photoProfit=0;
   const abs=attModel().abs,designs={},postsBy={},DP=dailyPhoto();out.mods={};
@@ -440,7 +441,7 @@ function compute(){
   }
   let revenue=0,discounts=0,collected=0,tlPool=0,acPool=0;
   for(const r of S.recs){
-    const c=cli(r.clientId)?.name||r.clientName||'عميل',m=r.mgmt||{},ph=r.photo||{};
+    const c=cli(r.clientId)?.name||r.clientName||'عميل',m=r.mgmt||{},ph=r.photo||{};curAcc=c;
     const M=m.on?+m.price||0:0,Ph=photoOn(r)?+ph.price||0:0;
     const adFee=((r.adds||[]).filter(isAds).reduce((a,x)=>a+(+x.a||0),0)+adsSum(r))*(+(F.adsPct??10))/100;
     revenue+=M+Ph+adFee;discounts+=discOf(r);if(r.status==='paid')collected+=M+Ph+adFee-discOf(r);
@@ -472,9 +473,11 @@ function compute(){
       photoProfit+=Ph-o;
     }
   }
-  for(const f of S.free||[]){const c=f.clientId?(cli(f.clientId)?.name||f.clientName||'عميل'):'شغل داخلي';revenue+=f.clientId?+f.price||0:0;
+  curAcc=null;
+  for(const f of S.free||[]){const c=f.clientId?(cli(f.clientId)?.name||f.clientName||'عميل'):'شغل داخلي';curAcc=f.clientId?c:null;revenue+=f.clientId?+f.price||0:0;
     if(f.clientId){const r=S.recs.find(x=>x.clientId===f.clientId);if(r?.status==='paid')collected+=+f.price||0}
     add(f.emp,+f.cost||0,{type:'pct',role:'freelance',what:`فريلانس · ${f.desc||'شغل'} · ${c}`})}
+  curAcc=null;
   const tls=S.emps.filter(e=>has(e,'teamleader')),acs=S.emps.filter(e=>has(e,'accountant'));
   tls.forEach(e=>add(e.id,tlPool/tls.length,{type:'daily',role:'teamleader',share:tlPool/tls.length,what:'تيم ليدر · نسبة كل باقات الإدارة'}));
   acs.forEach(e=>add(e.id,acPool/acs.length,{type:'pct',role:'accountant',what:'محاسب · نسبة كل الباقات'}));
@@ -1345,7 +1348,8 @@ function vPay(){
   ${Object.keys(C.X).length?`<div class="panel"><h3>عمولات سيلز من برا الفريق</h3><div class="tbl" style="margin-top:8px"><table><thead><tr><th>الاسم</th><th>البنود</th><th>العمولة</th></tr></thead><tbody>${Object.entries(C.X).map(([nm,x])=>`<tr><td>${h(nm)}</td><td class="small">${x.lines.map(l=>h(l.what)).join('<br>')}</td><td class="num"><b>${money(x.total)}</b></td></tr>`).join('')}</tbody></table></div></div>`:''}
   ${ids.length?ids.map(id=>{const e=emp(id),p=C.P[id];
    const covers={};p.lines.filter(l=>l.type==='cover').forEach(c=>{const k=c.date+c.from;(covers[k]??={...c,amt:0});covers[k].amt+=c.amt});
-   const rows=p.lines.filter(l=>l.type!=='cover').map(l=>{
+   const G=groupLines(p.lines,C),grows=G.groups.map(x=>`<tr><td><b>${h(x.acc)}</b><div class="small muted">${x.parts.map(q=>`${money(q.amt)} ${h(q.label)}`).join(' · ')}</div></td><td class="num">${money(x.full)}</td><td class="num minus">${x.full-x.amt>0.5?'−'+money(x.full-x.amt):'—'}</td><td class="num">${money(x.amt)}</td></tr>`).join('');
+   const rows=grows+G.rest.map(l=>{
      if(l.type==='daily')return `<tr><td>${h(l.what)}</td><td class="num">${money(l.share)}</td><td>—</td><td class="num">${money(l.amt)}</td></tr>`;
      if(l.type==='sumadj')return `<tr><td>${h(l.what)}</td><td></td><td class="num ${l.amt<0?'minus':''}">${l.amt<0?'−'+money(-l.amt):'—'}</td><td class="num ${l.amt<0?'minus':'plus'}">${l.amt<0?'−':'+'}${money(Math.abs(l.amt))}</td></tr>`;
      if(l.type==='absence')return `<tr><td>${l.s==='leave'?'إجازة':'غياب'} يوم <span class="num">${l.date.slice(8)}/${l.date.slice(5,7)}</span>${(l.covers||[]).length?`<div class="small muted">غطّى مكانه ${h(l.covers.map(x=>emp(x)?.name||'').join('، '))}</div>`:''}</td><td></td><td class="num minus">−${money(-l.amt)}</td><td class="num minus">−${money(-l.amt)}</td></tr>`;
@@ -1529,9 +1533,14 @@ async function invPdf(r,elId,fname){
   if(navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file],title:name})}catch(e){if(e.name!=='AbortError')throw e}}
   else{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();toast('الـ PDF اتنزّل')}
 }
+// تجميع المرتب بالأكونت: سطر واحد لكل أكونت، والتفاصيل للمدير بس
+function accLabel(l,C){if(l.type==='deliv')return `كريتور ${l.kind} (${l.n} من ${l.target})`;if(l.type==='design')return `ديزاين (${l.n} من ${l.target||C?.tgt||8})`;return String(l.what||'').replace(' · '+l.acc,'').replace(l.acc+' · ','')}
+const accFull=l=>(l.type==='deliv'||l.type==='design')?(l.tot?l.share*l.n/l.tot:l.share):l.amt;
+function groupLines(lines,C){const g={},rest=[];for(const l of lines){if(l.type==='cover')continue;if(l.acc){const x=(g[l.acc]??={acc:l.acc,amt:0,full:0,parts:[]});x.amt+=l.amt;x.full+=accFull(l);x.parts.push({label:accLabel(l,C),amt:l.amt})}else rest.push(l)}return{groups:Object.values(g),rest}}
 function slipRows(C,id){
   const p=C.P[id];if(!p)return[];const rows=[],cov={};const dd=d=>d.slice(8)+'/'+d.slice(5,7);
-  for(const l of p.lines){
+  groupLines(p.lines,C).groups.forEach(x=>rows.push({t:x.acc,a:x.amt}));
+  for(const l of p.lines){if(l.acc)continue;
     if(l.type==='cover'){const k=l.from;(cov[k]??={n:0,amt:0,from:l.from});cov[k].n++;cov[k].amt+=l.amt;continue}
     if(l.type==='design'){rows.push({t:`تصميم · ${l.client} (${l.n} من ${l.target||C.tgt})`,a:l.amt});continue}
     if(l.type==='deliv'){rows.push({t:`${l.kind} · ${l.client} (${l.n} من ${l.target})`,a:l.amt});continue}
