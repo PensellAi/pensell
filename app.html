@@ -79,7 +79,10 @@ h4{font-size:14px;margin:0;font-weight:600}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .en-row{display:flex;flex-direction:column;gap:6px;padding:10px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
 .en-row .r{display:flex;gap:6px;flex-wrap:wrap;align-items:center}.en-row .r>select,.en-row .r>input{flex:1 1 140px;min-width:0}.en-row .r>.x{flex:none}.en-row .r:first-child{flex-wrap:nowrap}.en-row .r:first-child>select{flex:1 1 0}
-.xt summary{cursor:pointer;padding:6px 0}
+.xt summary,details.en-row summary{cursor:pointer;padding:2px 0}
+.acc-t{display:flex;flex-direction:column;gap:6px;padding:8px;border-radius:10px;background:var(--bg)}
+.chips{display:flex;gap:6px;flex-wrap:wrap}.chip{border:1px solid var(--line);background:var(--surface);color:var(--ink);font:500 13px var(--body);padding:6px 12px;border-radius:16px;cursor:pointer}.chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.conf{display:flex;flex-direction:column;gap:4px;border-top:1px dashed var(--line);padding-top:6px}
 .qa-grid{display:grid;grid-template-columns:1fr;gap:10px}.qa-grid input,.qa-grid select{width:100%;min-width:0}
 @media(min-width:760px){.qa-grid{grid-template-columns:1.3fr 1.3fr 1fr auto;align-items:end}}
 .between{justify-content:space-between}
@@ -257,7 +260,7 @@ const pkgTotal=r=>(r.mgmt?.on?+r.mgmt.price||0:0)+(photoOn(r)?+r.photo?.price||0
 /* الحضور: من البصمة + الموديريشن + أي شغل اتسجّل في المتابعة اليومية */
 // المتابعة اليومية بقت مهام: اللي بيتحسب في المرتب والفاتورة هو اللي التيم ليدر أكّد إنه «تم فعلاً» بس
 const okX=x=>!x.id||x.ok===true||(x.ok===false&&!!x.by);let _attK=null,_attV=null;
-function ATT(){if(_attK===S.att)return _attV;const o={};for(const[k,d]of Object.entries(S.att||{})){o[k]={...d};for(const f of ['posts','designs','shoots','edits','ads'])o[k][f]=(d[f]||[]).filter(x=>(f==='posts'||f==='designs'?okX(x):!x.id||x.ok===true)&&!(f==='posts'&&x.t==='ميتنج'))}_attK=S.att;_attV=o;return o}
+function ATT(){if(_attK===S.att)return _attV;const o={};for(const[k,d]of Object.entries(S.att||{})){o[k]={...d};for(const f of ['posts','designs','shoots','edits','ads'])o[k][f]=(d[f]||[]).filter(x=>(f==='posts'||f==='designs'?okX(x):!x.id||x.ok===true)&&!(f==='posts'&&(x.t==='ميتنج'||x.t==='بلان')))}_attK=S.att;_attV=o;return o}
 const ownerEmpId=()=>(S.emps.find(isOwnerEmp)||emp('ahmed-assem'))?.id||null;
 const closedOk=d=>{const x=S.att?.[d];if(!x?.closedAt)return false;const t=x.closedAt;if(t&&t.toDate){const z=t.toDate();return z.getFullYear()+'-'+String(z.getMonth()+1).padStart(2,'0')+'-'+String(z.getDate()).padStart(2,'0')===d}return x.closedDay===d};
 const closedTime=d=>{const t=S.att?.[d]?.closedAt;return t&&t.toDate?hm(t.toDate()):(typeof t==='string'?t:'')};
@@ -282,7 +285,7 @@ const adsOf=r=>r.month===S.month?(dailyAds()[r.clientId]||[]):[];
 const adsSum=r=>adsOf(r).reduce((a,x)=>a+x.amt,0);
 const recTotal=r=>Math.max(0,pkgTotal(r)+sumA(r.adds)+adsSum(r)+freeOf(r).reduce((a,f)=>a+(+f.price||0),0)-sumA(r.subs)-(+r.discount||0));
 const isFri=d=>new Date(d+'T12:00').getDay()===5;
-const DG_T=['ديزاين','كيرزل','تعديل','تحسين','وضع لوجو','فيديو ايديت'],PS_T=['بوست','ستوري','ميتنج'];
+const DG_T=['ديزاين','كيرزل','تعديل','تحسين','وضع لوجو','فيديو ايديت'],PS_T=['بوست','ستوري','بلان','ميتنج'];
 const isAds=x=>x.k?x.k==='ads':/إعلان/.test(x.d||'');
 const ADD_P=['إعلانات ممولة','متأخرات','مواصلات'],SUB_P=[['دفعة مقدمة','paid'],['مدفوع خلال الشهر','paid'],['خصم','disc']];
 function toast(t){const el=document.createElement('div');el.className='toast';el.textContent=t;document.body.appendChild(el);setTimeout(()=>el.remove(),2200)}
@@ -389,7 +392,7 @@ function subMonth(){
   S.unsub.rtl=db.doc('ratings/'+m+'_tl').onSnapshot(s=>{S.ratings.tl=s.exists?s.data().scores||{}:{};rr()},err);
   if(S.fin){S.unsub.free=db.doc('fin/main').collection('freelance').where('month','==',m).onSnapshot(s=>{S.free=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.date||'').localeCompare(a.date||''));rr()},err);S.unsub.slp=db.doc('fin/main').collection('payslips').where('month','==',m).onSnapshot(s=>{S.slips={};s.docs.forEach(d=>{const x=d.data();S.slips[x.emp]=x});rr()},err);S.unsub.rst=db.doc('stars/'+m).onSnapshot(s=>{S.monthStar=s.exists?s.data():null;rr()},err);S.unsub.row=db.doc('ratings/'+m+'_owner').onSnapshot(s=>{S.ratings.owner=s.exists?s.data().scores||{}:{};rr()},err)}
   if(S.fin)S.unsub.rec=db.doc('fin/main').collection('invoices').where('month','==',m).onSnapshot(s=>{S.recs=s.docs.map(d=>({id:d.id,...d.data()}));rr()},err);
-  S.unsub.att=db.collection('attendance').where('date','>=',m+'-01').where('date','<=',m+'-31').onSnapshot(s=>{S.att={};s.docs.forEach(d=>S.att[d.id]=d.data());rr()},err);
+  S.attLoaded=false;S.unsub.att=db.collection('attendance').where('date','>=',m+'-01').where('date','<=',m+'-31').onSnapshot(s=>{S.att={};s.docs.forEach(d=>S.att[d.id]=d.data());S.attLoaded=true;rr()},err);
 }
 function subTasks(){if(S.unsubTasks)S.unsubTasks();S.tasks={};S.unsubTasks=db.collection('tasks').where('date','==',S.taskDate).onSnapshot(s=>{S.tasks={};s.docs.forEach(d=>{const x=d.data();S.tasks[x.emp]=x});rr()},err)}
 async function save(fn,ok){try{await fn();if(ok)toast(ok);return true}catch(e){console.warn(e);toast(e&&e.code==='permission-denied'?'مالكش صلاحية تعمل ده':'ماتحفظش، اتأكد من النت وجرّب تاني');return false}}
@@ -1011,8 +1014,8 @@ function vTeam(){
   <div class="panel"><div class="list">${[...S.emps].sort((a,b)=>firstIdx(a)-firstIdx(b)).map(e=>`<div class="item"><div class="grow"><b>${h(e.name)}</b>${e.demo?'<span class="demo">مثال</span>':''}<div class="small muted">${h(rolesTxt(e))}</div></div>${e.email?`<span class="pill paid" dir="ltr">${h(e.email)}</span>`:'<span class="pill none">من غير إيميل · مش هيقدر يبصم</span>'}<span class="amt">${egp(C.P[e.id]?.total||0)}</span><button class="btn sm" data-act="editEmp" data-id="${e.id}">تعديل</button></div>`).join('')}</div></div></div>`;
 }
 const EN={
-  posts:{title:'الكريتور',hint:'لكل كريتور: الأكونت من الأكونتات المتوزعة عليه، وبوست ولا ستوري ولا ميتنج. لو بيغطي مكان حد غايب، اختار «تغطية مكان…» فتظهر أكونتات اللي غاب، واللي غطّى ياخد حسابه.',roles:['creator','teamleader'],asg:'creator',cover:true,t:PS_T,add:'+ مهمة كريتور'},
-  designs:{title:'الديزاينر',hint:'الأكونت من المتوزعين على الديزاينر، ونوع الشغل. لو فيه تغطية، اختار «تغطية مكان…» واللي غطّى ياخد حسابه.',roles:['designer'],asg:'designer',cover:true,t:DG_T,add:'+ مهمة ديزاين'},
+  posts:{title:'الكريتور',hint:'قدام كل كريتور الأكونتات المتوزعة عليه. اختار المطلوب من كل أكونت النهارده: بوست، ستوري، بلان، ميتنج، ولا حاجة. لو حد غاب، دوس «+ تغطية» تحت اللي هيغطي واختار مكان مين والأكونت والمهمة، واللي غطّى ياخد حسابها.',roles:['creator'],asg:'creator',cover:true,t:PS_T,add:'+ مهمة كريتور'},
+  designs:{title:'الديزاينر',hint:'قدام كل ديزاينر الأكونتات المتوزعة عليه. اختار المطلوب من كل أكونت النهارده، ولا حاجة. لو حد غاب، دوس «+ تغطية» تحت اللي هيغطي.',roles:['designer'],asg:'designer',cover:true,t:DG_T,add:'+ مهمة ديزاين'},
   shoots:{title:'التصوير',hint:'لو فيه تصوير النهارده: المصور، والأكونت، وسيشن ولا ريل. التصوير بيضيف باقة التصوير على فاتورة العميل.',roles:['photographer'],t:['سيشن','ريل'],n:'عدد الريلز',note:'ملاحظة',add:'+ تصوير'},
   edits:{title:'المونتاج',hint:'المونتير، والأكونت، وعدد الريلز. في الملاحظة ممكن تحط لينك الدرايف اللي فيه الداتا.',roles:['editor'],n:'عدد الريلز',note:'ملاحظة أو لينك الدرايف',add:'+ مونتاج'},
   ads:{title:'الإعلانات الممولة',hint:'الميديا باير، والأكونت، ولينك البوست اللي هيتمول، والمبلغ. المبلغ بيتضاف على فاتورة العميل لما يتأكد إنه «تم فعلاً».',roles:['mediabuyer'],link:'لينك البوست اللي هيتمول',amt:1,note:'ملاحظة: التارجت، اللوكيشن…',add:'+ إعلان ممول'}};
@@ -1026,8 +1029,10 @@ const xtraOf=id=>{const T=S.tasks[id];return{t:(T?.items||[]).filter(x=>!x.k||x.
 const xtraD=id=>S.attDraft.extra[id]??=xtraOf(id);
 function vAtt(){
   const d=S.attDate,day=S.att[d]||{};
-  if(!S.attDraft||S.attDraft.date!==d){
-    const D={date:d,mods:JSON.parse(JSON.stringify(day.mods||{})),extra:{}};
+  if(!S.attLoaded)return `<div class="empty"><h3>بيحمّل…</h3></div>`;
+  // المسودة بتتبني من آخر نسخة متحفظة، وبتتحدّث لوحدها طول ما مفيش تعديل
+  if(!S.attDraft||S.attDraft.date!==d||(!S.attDraft.dirty&&S.attDraft.src!==S.att[d])){
+    const D={date:d,src:S.att[d],mods:JSON.parse(JSON.stringify(day.mods||{})),extra:{}};
     for(const k of Object.keys(EN))D[k]=JSON.parse(JSON.stringify(day[k]||[]));
     S.emptyMods=!day.mods;S.attDraft=D;
   }
@@ -1037,25 +1042,41 @@ function vAtt(){
   const empOpts=(sel,ex)=>`<option value="">محدش</option>`+S.emps.filter(x=>x.id!==ex).map(x=>`<option value="${x.id}" ${sel===x.id?'selected':''}>${h(x.name)} — ${h(rolesTxt(x))}</option>`).join('');
   const people=roles=>[...S.emps.filter(e=>roles.some(r=>has(e,r))),...S.emps.filter(e=>!roles.some(r=>has(e,r)))];
   const pend=Object.keys(EN).reduce((s,k)=>s+(D[k]||[]).filter(x=>x.e&&x.a&&x.ok!==true&&x.ok!==false).length,0);
-  const row=(k,c,x,i)=>{const at=f=>`id="en_${k}_${f}_${i}" data-en="${k}" data-f="${f}" data-i="${i}"`;
-    const al=c.asg?accsFor(x.cv||x.e,c.asg):[],list=al.length?accs.filter(cl=>al.includes(cl.id)||cl.id===x.a):accs;
-    const ti=x.id&&(S.tasks[x.e]?.items||[]).find(y=>y.id===x.id),eDone=!!ti?.done;
-    return `<div class="en-row">
-     <div class="r"><select ${at('e')} aria-label="مين">${people(c.roles).map(e=>`<option value="${e.id}" ${x.e===e.id?'selected':''}>${h(e.name)}</option>`).join('')}</select>
-      ${c.cover?`<select ${at('cv')} aria-label="مكان مين"><option value="">شغله هو</option>${S.emps.filter(p=>p.id!==x.e&&c.roles.some(r=>has(p,r))).map(p=>`<option value="${p.id}" ${x.cv===p.id?'selected':''}>تغطية مكان ${h(p.name)}</option>`).join('')}</select>`:''}
-      <button class="x" data-act="rmEn" data-k="${k}" data-i="${i}" aria-label="شيل">−</button></div>
-     <div class="r"><select ${at('a')} aria-label="الأكونت"><option value="">الأكونت</option>${list.map(cl=>`<option value="${cl.id}" ${x.a===cl.id?'selected':''}>${h(cl.name)}</option>`).join('')}</select>
-      ${c.t?`<select ${at('t')} aria-label="النوع">${c.t.map(o=>`<option ${(x.t||c.t[0])===o?'selected':''}>${o}</option>`).join('')}</select>`:''}
-      ${c.n?`<input ${at('n')} type="number" min="0" inputmode="numeric" placeholder="${c.n}" value="${x.n??''}" aria-label="${c.n}" style="width:96px">`:''}
-      ${c.amt?`<input ${at('amt')} type="number" min="0" inputmode="numeric" placeholder="المبلغ" value="${x.amt??''}" aria-label="المبلغ" style="width:96px">`:''}</div>
-     ${c.link?`<input ${at('link')} dir="ltr" placeholder="${c.link}" value="${h(x.link||'')}" aria-label="${c.link}">`:''}
-     ${c.note?`<input ${at('note')} placeholder="${c.note}" value="${h(x.note||'')}" aria-label="ملاحظة">`:''}
-     <div class="row between" style="gap:6px"><span class="small ${eDone?'':'muted'}" style="${eDone?'color:var(--good)':''}">${!x.id?'جديدة · لسه ماتحفظتش':eDone?'الموظف علّم إنها خلصت ✓':'الموظف لسه ماعلّمش عليها'}</span>
+  const at=(k,f,i)=>`id="en_${k}_${f}_${i}" data-en="${k}" data-f="${f}" data-i="${i}"`;
+  // سطر التأكيد تحت كل مهمة: الموظف علّم؟ + تم فعلاً / متمّتش + السبب
+  const conf=(k,c,x,i)=>{const ti=x.id&&(S.tasks[x.e]?.items||[]).find(y=>y.id===x.id),eDone=!!ti?.done;
+    return `<div class="row between" style="gap:6px"><span class="small ${eDone?'':'muted'}" style="${eDone?'color:var(--good)':''}">${!x.id?'لسه ماتحفظتش':eDone?'الموظف علّم إنها خلصت ✓':'الموظف لسه ماعلّمش'}</span>
       <div class="seg">${[[true,'تم فعلاً ✓','p'],[false,'متمّتش','a']].map(([v,nm,cl])=>`<button class="${x.ok===v?'on '+cl:''}" data-act="enOk" data-k="${k}" data-i="${i}" data-v="${v?1:0}">${nm}</button>`).join('')}</div></div>
-     ${x.ok===false&&c.cover?`<div class="r"><select ${at('by')} aria-label="السبب من مين"><option value="">السبب منه هو · بتتخصم</option>${S.emps.filter(p=>p.id!==x.e).map(p=>`<option value="${p.id}" ${x.by===p.id?'selected':''}>تأخير من ${h(p.name)} · مش بتتخصم منه</option>`).join('')}</select><input ${at('why')} placeholder="السبب (مثلاً: الديزاين اتأخر)" value="${h(x.why||'')}" aria-label="السبب"></div>`:''}</div>`};
-  const block=(k,c)=>`<div class="panel"><h3>${c.title}</h3><p class="small muted" style="margin:4px 0 10px">${c.hint}</p>
-   <div class="stack" style="gap:10px">${(D[k]||[]).map((x,i)=>row(k,c,x,i)).join('')}</div>
-   <button class="btn sm" data-act="addEn" data-k="${k}" style="margin-top:8px">${c.add}</button></div>`;
+     ${x.ok===false&&c.cover?`<div class="r"><select ${at(k,'by',i)} aria-label="السبب من مين"><option value="">السبب منه هو · بتتخصم</option>${S.emps.filter(p=>p.id!==x.e).map(p=>`<option value="${p.id}" ${x.by===p.id?'selected':''}>تأخير من ${h(p.name)} · مش بتتخصم منه</option>`).join('')}</select><input ${at(k,'why',i)} placeholder="السبب (مثلاً: الديزاين اتأخر)" value="${h(x.why||'')}" aria-label="السبب"></div>`:''}`};
+  const pplOf=(k,c)=>{const L=D[k]||[],ids=new Set(L.map(x=>x.e));return S.emps.filter(e=>c.roles.some(r=>has(e,r))||ids.has(e.id))};
+  // الكريتور والديزاينر: أكونتاته المتوزعة + اختيار المطلوب من كل أكونت + تغطية
+  const distCard=(k,c,e)=>{const L=D[k]||[],idx=L.map((x,i)=>[x,i]),own=idx.filter(([x])=>x.e===e.id&&x.cv==null),cov=idx.filter(([x])=>x.e===e.id&&x.cv!=null);
+    const accIds=[...new Set([...accsFor(e.id,c.asg),...own.map(([x])=>x.a)])].filter(a=>cli(a));
+    const mates=S.emps.filter(p=>p.id!==e.id&&c.roles.some(r=>has(p,r)));
+    return `<div class="en-row"><b>${h(e.name)}</b>
+     ${accIds.length?accIds.map(a=>{const on=own.filter(([x])=>x.a===a);return `<div class="acc-t"><div class="small" style="font-weight:600">${h(clName(a))}</div>
+       <div class="chips"><button class="chip ${on.length?'':'on'}" data-act="enNone" data-k="${k}" data-e="${e.id}" data-a="${a}">ولا حاجة</button>${c.t.map(t=>`<button class="chip ${on.some(([x])=>x.t===t)?'on':''}" data-act="enTog" data-k="${k}" data-e="${e.id}" data-a="${a}" data-t="${t}">${t}</button>`).join('')}</div>
+       ${on.map(([x,i])=>`<div class="conf"><span class="small" style="font-weight:600">${h(x.t)}</span>${conf(k,c,x,i)}</div>`).join('')}</div>`}).join('')
+      :'<div class="small muted">مفيش أكونتات متوزعة عليه الشهر ده. وزّعها من «التوزيع».</div>'}
+     ${cov.map(([x,i])=>{const al=x.cv?accsFor(x.cv,c.asg):[],list=S.clients.filter(cl=>cl.active!==false&&(al.length?al.includes(cl.id)||cl.id===x.a:true));
+       return `<div class="acc-t" style="background:var(--accent-soft)"><div class="r"><select ${at(k,'cv',i)} aria-label="مكان مين"><option value="">مكان مين؟</option>${mates.map(p=>`<option value="${p.id}" ${x.cv===p.id?'selected':''}>تغطية مكان ${h(p.name)}</option>`).join('')}</select><button class="x" data-act="rmEn" data-k="${k}" data-i="${i}" aria-label="شيل">−</button></div>
+        <div class="r"><select ${at(k,'a',i)} aria-label="الأكونت"><option value="">الأكونت</option>${list.map(cl=>`<option value="${cl.id}" ${x.a===cl.id?'selected':''}>${h(cl.name)}</option>`).join('')}</select><select ${at(k,'t',i)} aria-label="المهمة">${c.t.map(o=>`<option ${(x.t||c.t[0])===o?'selected':''}>${o}</option>`).join('')}</select></div>
+        ${conf(k,c,x,i)}</div>`}).join('')}
+     <div><button class="btn sm" data-act="addCv" data-k="${k}" data-e="${e.id}">+ تغطية</button></div></div>`};
+  // التصوير والمونتاج والإعلانات: مهام لكل واحد بالأكونت
+  const freeCard=(k,c,e)=>{const L=D[k]||[],mine=L.map((x,i)=>[x,i]).filter(([x])=>x.e===e.id);
+    return `<details class="en-row" ${mine.length?'open':''}><summary><b>${h(e.name)}</b>${mine.length?` <span class="small muted">· ${mine.length} مهمة</span>`:''}</summary><div class="stack" style="gap:8px;margin-top:6px">
+     ${mine.map(([x,i])=>`<div class="acc-t"><div class="r"><select ${at(k,'a',i)} aria-label="الأكونت"><option value="">الأكونت</option>${accs.map(cl=>`<option value="${cl.id}" ${x.a===cl.id?'selected':''}>${h(cl.name)}</option>`).join('')}</select>
+       ${c.t?`<select ${at(k,'t',i)} aria-label="النوع" style="flex:0 1 110px">${c.t.map(o=>`<option ${(x.t||c.t[0])===o?'selected':''}>${o}</option>`).join('')}</select>`:''}
+       ${c.n?`<input ${at(k,'n',i)} type="number" min="0" inputmode="numeric" placeholder="${c.n}" value="${x.n??''}" aria-label="${c.n}" style="width:96px">`:''}
+       ${c.amt?`<input ${at(k,'amt',i)} type="number" min="0" inputmode="numeric" placeholder="المبلغ" value="${x.amt??''}" aria-label="المبلغ" style="width:96px">`:''}
+       <button class="x" data-act="rmEn" data-k="${k}" data-i="${i}" aria-label="شيل">−</button></div>
+       ${c.link?`<input ${at(k,'link',i)} dir="ltr" placeholder="${c.link}" value="${h(x.link||'')}" aria-label="${c.link}">`:''}
+       ${c.note?`<input ${at(k,'note',i)} placeholder="${c.note}" value="${h(x.note||'')}" aria-label="ملاحظة">`:''}
+       ${conf(k,c,x,i)}</div>`).join('')}
+     <div><button class="btn sm" data-act="addEnE" data-k="${k}" data-e="${e.id}">${c.add}</button></div></div></details>`};
+  const block=(k,c)=>{const ppl=pplOf(k,c);return `<div class="panel"><h3>${c.title}</h3><p class="small muted" style="margin:4px 0 10px">${c.hint}</p>
+   <div class="stack" style="gap:10px">${ppl.length?ppl.map(e=>c.asg?distCard(k,c,e):freeCard(k,c,e)).join(''):`<p class="small muted">مفيش حد في الفريق بالبوزيشن ده.</p>`}</div></div>`};
   const others=S.emps.filter(e=>!isOwnerEmp(e));
   return `<div class="stack">
   <div class="row between"><h2>المتابعة اليومية</h2><div class="row"><input type="date" id="attDate" value="${d}" style="width:auto"><span class="pill ${saved?'paid':'none'}">${saved?'متسجّلة':'لسه ماتسجّلتش'}</span></div></div>
@@ -1348,6 +1369,7 @@ document.addEventListener('input',e=>{
   if(t.dataset.dg){const x=S.attDraft.designs[+t.dataset.i];if(x)x[t.dataset.dg]=t.dataset.dg==='n'?(t.value===''?'':+t.value):t.value}
   if(t.dataset.ps){const x=S.attDraft.posts[+t.dataset.i];if(x)x[t.dataset.ps]=t.dataset.ps==='n'?(t.value===''?'':+t.value):t.value}
   if(t.dataset.en){const x=S.attDraft[t.dataset.en]?.[+t.dataset.i];if(x)x[t.dataset.f]=(t.dataset.f==='n'||t.dataset.f==='amt')?(t.value===''?'':+t.value):t.value}
+  if(S.attDraft&&(t.dataset.en||t.dataset.xt||t.dataset.xm||t.dataset.mod))S.attDraft.dirty=1;
   if(t.dataset.xt&&S.attDraft)xtraD(t.dataset.xt).t=t.value;
   if(t.dataset.xm&&S.attDraft)xtraD(t.dataset.xm).msg=t.value;
   if(t.dataset.mod){(S.attDraft.mods[t.dataset.mod]??={s:'absent'}).cover=t.value||null}
@@ -1363,6 +1385,7 @@ document.addEventListener('change',e=>{
   if(t.dataset.dg){const x=S.attDraft.designs[+t.dataset.i];if(x)x[t.dataset.dg]=t.dataset.dg==='n'?(t.value===''?'':+t.value):t.value}
   if(t.dataset.ps){const x=S.attDraft.posts[+t.dataset.i];if(x)x[t.dataset.ps]=t.dataset.ps==='n'?(t.value===''?'':+t.value):t.value}
   if(t.dataset.en){const x=S.attDraft[t.dataset.en]?.[+t.dataset.i];if(x)x[t.dataset.f]=(t.dataset.f==='n'||t.dataset.f==='amt')?(t.value===''?'':+t.value):t.value}
+  if(S.attDraft&&(t.dataset.en||t.dataset.xt||t.dataset.xm||t.dataset.mod))S.attDraft.dirty=1;
   if(t.dataset.xt&&S.attDraft)xtraD(t.dataset.xt).t=t.value;
   if(t.dataset.xm&&S.attDraft)xtraD(t.dataset.xm).msg=t.value;
   if(t.dataset.mod){(S.attDraft.mods[t.dataset.mod]??={s:'absent'}).cover=t.value||null}
@@ -1523,6 +1546,11 @@ document.addEventListener('click',async e=>{
   if(a==='addPs'){S.attDraft.posts.push({e:S.emps.find(x=>has(x,'creator'))?.id||S.emps[0]?.id,a:'',t:'بوست'});render();return}
   if(a==='rmPs'){S.attDraft.posts.splice(+b.dataset.i,1);render();return}
   if(a==='addEn'){const k=b.dataset.k,c=EN[k],L=S.attDraft[k],last=L[L.length-1];L.push({e:last?.e||S.emps.find(x=>c.roles.some(r=>has(x,r)))?.id||S.emps[0]?.id,cv:last?.cv||'',a:'',...(c.t?{t:c.t[0]}:{})});render();return}
+  if(S.attDraft&&['enTog','enNone','addCv','addEnE','enOk','rmEn','modS','addAd','rmAd'].includes(a))S.attDraft.dirty=1;
+  if(a==='enTog'){const L=S.attDraft[b.dataset.k],{e,a:acc,t}=b.dataset,i=L.findIndex(x=>x.e===e&&x.a===acc&&x.t===t&&x.cv==null);if(i>=0)L.splice(i,1);else L.push({e,a:acc,t});render();return}
+  if(a==='enNone'){const k=b.dataset.k;S.attDraft[k]=S.attDraft[k].filter(x=>!(x.e===b.dataset.e&&x.a===b.dataset.a&&x.cv==null));render();return}
+  if(a==='addCv'){const c=EN[b.dataset.k];S.attDraft[b.dataset.k].push({e:b.dataset.e,cv:'',a:'',t:c.t[0]});render();return}
+  if(a==='addEnE'){const c=EN[b.dataset.k];S.attDraft[b.dataset.k].push({e:b.dataset.e,a:'',...(c.t?{t:c.t[0]}:{})});render();return}
   if(a==='enOk'){const x=S.attDraft[b.dataset.k]?.[+b.dataset.i];if(x){const v=b.dataset.v==='1';x.ok=x.ok===v?undefined:v;if(x.ok!==false){delete x.by;delete x.why}}render();return}
   if(a==='addAd'){S.attDraft.ads.push({a:'',link:'',amt:''});render();return}
   if(a==='rmAd'){S.attDraft.ads.splice(+b.dataset.i,1);render();return}
