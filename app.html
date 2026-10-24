@@ -248,7 +248,7 @@ const rolesTxt=e=>rolesOf(e).map(k=>ROLES[k]).join(' · ');
 const firstIdx=e=>Math.min(99,...rolesOf(e).map(k=>Object.keys(ROLES).indexOf(k)));
 const isExt=x=>typeof x==='string'&&x.startsWith('ext:');
 const isOwnerEmp=e=>!!e&&OWNER_EMAILS.map(x=>x.toLowerCase()).includes((e.email||'').toLowerCase());
-const START=()=>S.cfg.start||'11:00',GRACE=()=>S.cfg.grace||'13:00';
+const START=()=>S.cfg.start||'12:00',GRACE=()=>S.cfg.grace||'14:00';
 const lateKind=t=>!t?'':t>GRACE()?'hard':t>START()?'soft':'ok';
 function teamOf(r){const a=S.asg?.[r.clientId],t=r.mgmt?.team||{};
   return{creator:a?.creator?.length?a.creator:(t.creator?[{e:t.creator,from:1}]:[]),designer:a?a.designer:t.designer,moderator:a?a.moderator:t.moderator}}
@@ -309,8 +309,8 @@ let db=null,auth=null,unsubMine=null;
 const hm=d=>String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
 const tStr=x=>!x?'':typeof x==='string'?x:x.toDate?hm(x.toDate()):'';
 const normLog=log=>{const o={};for(const[k,v]of Object.entries(log||{}))o[k]={in:tStr(v?.in),out:tStr(v?.out),mr:Object.fromEntries(Object.entries(v?.mr||{}).map(([r,t])=>[r,tStr(t)]))};return o};
-// متابعة الموديريتور: جولة كل ساعتين من 12 الضهر لـ 10 بالليل
-const MR=[12,14,16,18,20,22],mrLbl=r=>(r>12?r-12:r)+(r<17?' الضهر':' بالليل'),curRound=()=>{const h=new Date().getHours();return h<12?null:Math.min(22,h-(h%2))};
+// متابعة الموديريتور: جولة كل ساعتين من 1 الضهر لـ 11 بالليل
+const MR=[13,15,17,19,21,23],mrLbl=r=>(r>12?r-12:r)+(r<15?' الضهر':r<18?' العصر':' بالليل'),curRound=()=>{const h=new Date().getHours();return h<13?null:Math.min(23,h-((h-13)%2))};
 const mrChips=(mr,d)=>{const cr=d===today()?curRound():d<today()?99:null;return MR.map(r=>{const t=mr?.[r];return `<span class="pill ${t?'paid':cr!=null&&r<cr?'red':'none'}" style="font-size:12px">${t?'✓ ':''}${r>12?r-12:r}${t?' · '+t:cr!=null&&r<cr?' ✗':''}</span>`}).join(' ')};
 const SNAP={serverTimestamps:'estimate'};
 const mainEl=()=>document.getElementById('main');
@@ -515,7 +515,7 @@ function recPreview(r){
 
 /* ---------- render ---------- */
 const TABS_FIN=[['home','الشهر'],['acc','العملاء'],['brief','الأكونتات'],['dist','التوزيع'],['att','المتابعة اليومية'],['sum','ملخص الشهر'],['free','فريلانس'],['pay','المرتبات'],['star','نجم الشهر'],['team','الفريق'],['site','الموقع'],['set','الإعدادات']];
-const TABS_TL=[['att','المتابعة اليومية'],['brief','الأكونتات'],['sum','ملخص الشهر'],['dist','التوزيع'],['rate','التقييم']];
+const TABS_TL=[['att','المتابعة اليومية'],['brief','الأكونتات'],['sum','ملخص الشهر'],['dist','التوزيع']];
 // بيانات صفحة العملاء (فيها صور تقيلة) بتتحمّل بس لما تفتح تبويب «الموقع»
 function ensureSite(){if(S.siteSub||!S.fin)return;S.siteSub=1;
   db.doc('site/main').onSnapshot(s=>{S.site=s.exists?s.data():{};rr()},err);
@@ -564,9 +564,9 @@ function asksInbox(){const L=openAsks();
    ${L.length?`<div class="list" style="margin-top:6px">${L.map(x=>`<div class="item" style="align-items:flex-start"><div class="grow" style="min-width:0"><b>${h(x.name)}</b> <span class="small muted">${atTxt(x.at)}</span><div style="white-space:pre-wrap;overflow-wrap:anywhere;margin-top:2px">${linkify(x.t)}</div></div><button class="btn sm" data-act="askDone" data-e="${x.emp}" data-id="${x.id}">تمام ✓</button></div>`).join('')}</div>`:'<p class="small muted" style="margin:6px 0 0">مفيش حاجة واقفة مع حد دلوقتي.</p>'}</div>`}
 function modPanel(p){const cr=curRound(),mr=p.mr||{},done=MR.filter(r=>mr[r]).length;
   return `<div class="panel stack" style="gap:8px"><div class="row between"><h3>💬 متابعة الكومنتس والرسايل</h3><span class="pill ${done?'paid':'none'}">${done} من ${MR.length}</span></div>
-   <p class="small muted" style="margin:0">مهمتك الثابتة: تتابع الكومنتس والرسايل طول اليوم من 12 الضهر لـ 10 بالليل. كل ساعتين هيوصلك إشعار، رد على كل حاجة جديدة ودوس الزرار ده.</p>
+   <p class="small muted" style="margin:0">مهمتك الثابتة: تتابع الكومنتس والرسايل طول اليوم من 1 الضهر لـ 11 بالليل. كل ساعتين هيوصلك إشعار، رد على كل حاجة جديدة ودوس الزرار ده.</p>
    <div style="display:flex;gap:4px;flex-wrap:wrap">${mrChips(mr,today())}</div>
-   ${cr==null?'<div class="small muted">أول جولة الساعة 12 الضهر.</div>':mr[cr]?`<div class="pill paid" style="text-align:center;padding:10px">جولة ${mrLbl(cr)} اتسجّلت ✓ · الجاية ${cr<22?mrLbl(cr+2):'بكرة 12 الضهر'}</div>`:`<button class="btn primary" data-act="modRound" data-r="${cr}" style="justify-content:center;padding:12px;font-size:16px">رديت على الكومنتس والرسايل ✓ · جولة ${mrLbl(cr)}</button>`}</div>`}
+   ${cr==null?'<div class="small muted">أول جولة الساعة 1 الضهر.</div>':mr[cr]?`<div class="pill paid" style="text-align:center;padding:10px">جولة ${mrLbl(cr)} اتسجّلت ✓ · الجاية ${cr<23?mrLbl(cr+2):'بكرة 1 الضهر'}</div>`:`<button class="btn primary" data-act="modRound" data-r="${cr}" style="justify-content:center;padding:12px;font-size:16px">رديت على الكومنتس والرسايل ✓ · جولة ${mrLbl(cr)}</button>`}</div>`}
 /* ---------- البريف وتقرير الشهر ---------- */
 const BRIEF_Q=[['sells','بيبيع إيه؟'],['offers','بيقدّم إيه بالظبط؟ (المنتجات / الخدمات / الأسعار)'],['location','مكانه فين؟ (الفروع / العنوان)'],['target','التارجت بتاعه مين؟'],['adv','ميزاته التنافسية'],['weak','عيوبه ونقاط ضعفه'],['competitors','المنافسين'],['tone','الهوية وطريقة الكلام (الألوان، الستايل، اللهجة)'],['owner','اسم العميل'],['phone','رقم العميل'],['links','لينكات صفحاته'],['insights','الإنسايتس وقت ما خدنا البيدج'],['followers','عدد الفولورز وقت ما خدنا البيدج'],['startDate','تاريخ ما خدنا البيدج'],['notes','ملاحظات تانية']];
 const REP_N=[['followers','الفولورز آخر الشهر'],['reach','الوصول (Reach)'],['engagement','التفاعل (Engagement)']];
@@ -1022,7 +1022,7 @@ function starRank(){
     const keys=[...new Set([...rolesOf(e).map(k=>meas[k]).filter(Boolean),'tasks','other'])].filter(k=>mx[k]>0);
     const prod=15*(keys.length?keys.reduce((a,k)=>a+E[k]/mx[k],0)/keys.length:attR);
     const cv=maxCov?5*(cov[e.id]||0)/maxCov:0,tr=+rt.tl?.[e.id]||0,orr=+rt.owner?.[e.id]||0;
-    return{e,present:E.present,absent:E.absent,hard:R.hard,soft:R.soft,cov:cov[e.id]||0,att,prod,cv,rep,tr,orr,total:att+prod+cv+rep+25*tr/5+25*orr/5};
+    return{e,present:E.present,absent:E.absent,hard:R.hard,soft:R.soft,cov:cov[e.id]||0,att,prod,cv,rep,tr,orr,total:att+prod+cv+rep+50*orr/5};
   }).sort((a,b)=>b.total-a.total);
 }
 const stars=(id,val,dis)=>`<select id="${id}" ${dis?'disabled':''} style="width:auto"><option value="">—</option>${[1,2,3,4,5].map(x=>`<option value="${x}" ${+val===x?'selected':''}>${'★'.repeat(x)}</option>`).join('')}</select>`;
@@ -1030,11 +1030,11 @@ function vStar(){
   const L=starRank(),top=L[0],ms=S.monthStar,noTl=L.filter(x=>!x.tr).length,noOw=L.filter(x=>!x.orr).length;
   return `<div class="stack"><h2>نجم ${mName(S.month)}</h2>
   ${ms?`<div class="panel row between" style="border-color:var(--accent)"><div><div class="label">اتعلن</div><b style="font-size:18px">⭐ ${h(ms.name)}</b></div><span class="small muted">الموظفين شايفينه في صفحتهم</span></div>`:''}
-  <p class="small muted" style="margin:0">التقييم من 100: حضور والتزام 20 · إنتاج 15 (من «ملخص الشهر»: بوستات، تصميمات، جلسات تصوير، فيديوهات، مهام، أخرى) · تقرير الشهر 10 (للكريتور: اتبعت في ميعاده) · تغطية 5 · تقييم التيم ليدر 25 · تقييمك 25.</p>
-  ${noTl||noOw?`<div class="notice">${noTl?`${noTl} موظف لسه التيم ليدر ماقيّمهمش. `:''}${noOw?`${noOw} موظف لسه انت ماقيّمتهمش.`:''}</div>`:''}
-  <div class="panel tbl"><table><thead><tr><th>#</th><th>الموظف</th><th>المجموع</th><th>حضور</th><th>إنتاج</th><th>تقرير</th><th>تغطية</th><th>التيم ليدر</th><th>تقييمك</th></tr></thead><tbody>
+  <p class="small muted" style="margin:0">التقييم من 100: حضور والتزام 20 · إنتاج 15 (من «ملخص الشهر»: بوستات، تصميمات، جلسات تصوير، فيديوهات، مهام، أخرى) · تقرير الشهر 10 (للكريتور: اتبعت في ميعاده) · تغطية 5 · تقييمك 50.</p>
+  ${noOw?`<div class="notice">${noOw} موظف لسه انت ماقيّمتهمش.</div>`:''}
+  <div class="panel tbl"><table><thead><tr><th>#</th><th>الموظف</th><th>المجموع</th><th>حضور</th><th>إنتاج</th><th>تقرير</th><th>تغطية</th><th>تقييمك</th></tr></thead><tbody>
   ${L.map((x,i)=>`<tr${i===0?' style="background:var(--accent-soft)"':''}><td class="num">${i+1}</td><td><b>${h(x.e.name)}</b><div class="small muted">${x.present} يوم${x.absent?` · غاب ${x.absent}`:''}${x.hard?` · اتأخر ${x.hard}`:''}${x.cov?` · غطّى ${x.cov}`:''}</div></td><td class="num"><b style="font-size:16px;color:var(--accent)">${Math.round(x.total)}</b></td>
-   <td class="num">${x.att.toFixed(1)}</td><td class="num">${x.prod.toFixed(1)}</td><td class="num">${x.rep.toFixed(1)}</td><td class="num">${x.cv.toFixed(1)}</td><td style="color:var(--gold)">${x.tr?'★'.repeat(x.tr):'—'}</td><td>${stars('or_'+x.e.id,x.orr)}</td></tr>`).join('')}</tbody></table></div>
+   <td class="num">${x.att.toFixed(1)}</td><td class="num">${x.prod.toFixed(1)}</td><td class="num">${x.rep.toFixed(1)}</td><td class="num">${x.cv.toFixed(1)}</td><td>${stars('or_'+x.e.id,x.orr)}</td></tr>`).join('')}</tbody></table></div>
   <div class="row"><button class="btn" data-act="saveOwnerRate">حفظ تقييمي</button>${top?`<button class="btn primary" data-act="announce" data-id="${top.e.id}">أعلن ${h(top.e.name)} نجم الشهر ⭐</button>`:''}</div>
   <div class="field"><label class="label" for="star_note">كلمة تظهر مع الإعلان (اختياري)</label><input id="star_note" placeholder="مثلاً: أعلى التزام وأكتر تغطية الشهر ده"></div></div>`;
 }
@@ -1650,7 +1650,7 @@ document.addEventListener('click',async e=>{
   if(a==='savePush'){let u=v('s_push');if(u&&!/^https:\/\//.test(u))u='https://'+u;if(await save(()=>db.doc('cfg/settings').set({pushUrl:u},{merge:true}),'اتحفظ')){S.cfg={...S.cfg,pushUrl:u};S.pushDone=0;subscribePush(true);render()}return}
   if(a==='testPush'){try{const r=await fetch(pushUrl());const j=await r.json();toast(j.ok?'السيرفر شغال ✓':'السيرفر مش بيرد صح')}catch(_){toast('السيرفر مش بيرد. اتأكد من الرابط')}return}
   if(a==='saveTurn'){const turn={urls:v('s_turn_u'),user:v('s_turn_n'),pass:v('s_turn_p')};if(await save(()=>db.doc('cfg/settings').set({turn},{merge:true}),'اتحفظ')){S.cfg={...S.cfg,turn};render()}return}
-  if(a==='saveTimes'){const st=v('s_start')||'11:00',gr=v('s_grace')||'13:00';if(gr<st)return toast('السماحية لازم تكون بعد ميعاد الحضور');
+  if(a==='saveTimes'){const st=v('s_start')||'12:00',gr=v('s_grace')||'14:00';if(gr<st)return toast('السماحية لازم تكون بعد ميعاد الحضور');
     const ok=await save(()=>db.doc('cfg/settings').set({start:st,grace:gr},{merge:true}))&&await save(()=>db.doc('fin/main').set({lateFrac:+v('s_lf')},{merge:true}),'المواعيد اتحفظت');
     if(ok){S.cfg={...S.cfg,start:st,grace:gr};S.F={...S.F,lateFrac:+v('s_lf')};document.activeElement?.blur();render()}return}
   if(a==='saveRoles'){const tl=v('s_tl').split(/[\s,]+/).map(cleanEmail).filter(Boolean);if(await save(()=>db.doc('cfg/roles').set({tl}),'اتحفظ')){S.tlEmails=tl;document.activeElement?.blur();render()}return}
