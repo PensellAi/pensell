@@ -81,6 +81,7 @@ h4{font-size:14px;margin:0;font-weight:600}
 .en-row .r{display:flex;gap:6px;flex-wrap:wrap;align-items:center}.en-row .r>select,.en-row .r>input{flex:1 1 140px;min-width:0}.en-row .r>.x{flex:none}.en-row .r:first-child{flex-wrap:nowrap}.en-row .r:first-child>select{flex:1 1 0}
 .xt summary,details.en-row summary{cursor:pointer;padding:2px 0}
 .acc-t{display:flex;flex-direction:column;gap:6px;padding:8px;border-radius:10px;background:var(--bg)}
+.btn.xs{font-size:12px;padding:4px 9px;border-radius:8px}
 .chips{display:flex;gap:6px;flex-wrap:wrap}.chip{border:1px solid var(--line);background:var(--surface);color:var(--ink);font:500 13px var(--body);padding:6px 12px;border-radius:16px;cursor:pointer}.chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
 .conf{display:flex;flex-direction:column;gap:4px;border-top:1px dashed var(--line);padding-top:6px}
 .qa-grid{display:grid;grid-template-columns:1fr;gap:10px}.qa-grid input,.qa-grid select{width:100%;min-width:0}
@@ -1048,8 +1049,21 @@ function vAtt(){
     return `<div class="row between" style="gap:6px"><span class="small ${eDone?'':'muted'}" style="${eDone?'color:var(--good)':''}">${!x.id?'لسه ماتحفظتش':eDone?'الموظف علّم إنها خلصت ✓':'الموظف لسه ماعلّمش'}</span>
       <div class="seg">${[[true,'تم فعلاً ✓','p'],[false,'متمّتش','a']].map(([v,nm,cl])=>`<button class="${x.ok===v?'on '+cl:''}" data-act="enOk" data-k="${k}" data-i="${i}" data-v="${v?1:0}">${nm}</button>`).join('')}</div></div>
      ${x.ok===false&&c.cover?`<div class="r"><select ${at(k,'by',i)} aria-label="السبب من مين"><option value="">السبب منه هو · بتتخصم</option>${S.emps.filter(p=>p.id!==x.e).map(p=>`<option value="${p.id}" ${x.by===p.id?'selected':''}>تأخير من ${h(p.name)} · مش بتتخصم منه</option>`).join('')}</select><input ${at(k,'why',i)} placeholder="السبب (مثلاً: الديزاين اتأخر)" value="${h(x.why||'')}" aria-label="السبب"></div>`:''}`};
-  const pplOf=(k,c)=>{const L=D[k]||[],ids=new Set(L.map(x=>x.e));return S.emps.filter(e=>c.roles.some(r=>has(e,r))||ids.has(e.id))};
+  // مهمة تانية + ملاحظة لكل موظف: بتظهر في كارت واحد بس (أول كارت هو فيه أو اللي اتداس فيه الزرار)
+  const SEC=['posts','designs','mods','shoots','edits','ads','lead','rest'];
+  const cardsOf=eid=>SEC.filter(k=>k==='mods'?mods.some(e=>e.id===eid):k==='rest'?restP.some(e=>e.id===eid):k==='lead'?leads.some(e=>e.id===eid&&!isOwn(e)):pplOf(k,EN[k]).some(e=>e.id===eid));
+  const xCard=eid=>S.xCard?.[eid]||cardsOf(eid)[0];
+  const extraUI=(eid,k)=>{if(xCard(eid)!==k)return '';const X=D.extra[eid]??xtraOf(eid),sh=S.xShow?.[eid]||{};
+    return `${X.t||sh.t?`<textarea id="xt_${eid}" data-xt="${eid}" rows="2" placeholder="مهمة تانية، كل مهمة في سطر">${h(X.t)}</textarea>`:''}${X.msg||sh.m?`<input id="xm_${eid}" data-xm="${eid}" value="${h(X.msg)}" placeholder="ملاحظة أو رسالة ليه">`:''}`};
+  const tools=(eid,k,first)=>`<div class="row between" style="gap:6px"><div class="row" style="gap:4px">${first||''}<button class="btn xs" data-act="xAdd" data-e="${eid}" data-k="${k}" data-w="t">+ مهمة تانية</button><button class="btn xs" data-act="xAdd" data-e="${eid}" data-k="${k}" data-w="m">+ ملاحظة</button></div><button class="btn sm primary" data-act="saveAtt">حفظ</button></div>`;
+  const isOwn=e=>isOwnerEmp(e)||e.id===ownerEmpId();
+  const isLead=e=>isOwn(e)||has(e,'teamleader')||(S.tlEmails||[]).includes((e.email||'').toLowerCase());
+  const pplOf=(k,c)=>{const L=D[k]||[],ids=new Set(L.map(x=>x.e));return S.emps.filter(e=>c.roles.some(r=>has(e,r))||(ids.has(e.id)&&!isLead(e)))};
   // الكريتور والديزاينر: أكونتاته المتوزعة + اختيار المطلوب من كل أكونت + تغطية
+  const coverRow=(k,c,x,i,mates)=>{const al=x.cv?accsFor(x.cv,c.asg):[],list=S.clients.filter(cl=>cl.active!==false&&(al.length?al.includes(cl.id)||cl.id===x.a:true));
+       return `<div class="acc-t" style="background:var(--accent-soft)"><div class="r"><select ${at(k,'cv',i)} aria-label="مكان مين"><option value="">مكان مين؟</option>${mates.map(p=>`<option value="${p.id}" ${x.cv===p.id?'selected':''}>تغطية مكان ${h(p.name)}</option>`).join('')}</select><button class="x" data-act="rmEn" data-k="${k}" data-i="${i}" aria-label="شيل">−</button></div>
+        <div class="r"><select ${at(k,'a',i)} aria-label="الأكونت"><option value="">الأكونت</option>${list.map(cl=>`<option value="${cl.id}" ${x.a===cl.id?'selected':''}>${h(cl.name)}</option>`).join('')}</select><select ${at(k,'t',i)} aria-label="المهمة">${c.t.map(o=>`<option ${(x.t||c.t[0])===o?'selected':''}>${o}</option>`).join('')}</select></div>
+        ${conf(k,c,x,i)}</div>`};
   const distCard=(k,c,e)=>{const L=D[k]||[],idx=L.map((x,i)=>[x,i]),own=idx.filter(([x])=>x.e===e.id&&x.cv==null),cov=idx.filter(([x])=>x.e===e.id&&x.cv!=null);
     const accIds=[...new Set([...accsFor(e.id,c.asg),...own.map(([x])=>x.a)])].filter(a=>cli(a));
     const mates=S.emps.filter(p=>p.id!==e.id&&c.roles.some(r=>has(p,r)));
@@ -1058,14 +1072,12 @@ function vAtt(){
        <div class="chips"><button class="chip ${on.length?'':'on'}" data-act="enNone" data-k="${k}" data-e="${e.id}" data-a="${a}">ولا حاجة</button>${c.t.map(t=>`<button class="chip ${on.some(([x])=>x.t===t)?'on':''}" data-act="enTog" data-k="${k}" data-e="${e.id}" data-a="${a}" data-t="${t}">${t}</button>`).join('')}</div>
        ${on.map(([x,i])=>`<div class="conf"><span class="small" style="font-weight:600">${h(x.t)}</span>${conf(k,c,x,i)}</div>`).join('')}</div>`}).join('')
       :'<div class="small muted">مفيش أكونتات متوزعة عليه الشهر ده. وزّعها من «التوزيع».</div>'}
-     ${cov.map(([x,i])=>{const al=x.cv?accsFor(x.cv,c.asg):[],list=S.clients.filter(cl=>cl.active!==false&&(al.length?al.includes(cl.id)||cl.id===x.a:true));
-       return `<div class="acc-t" style="background:var(--accent-soft)"><div class="r"><select ${at(k,'cv',i)} aria-label="مكان مين"><option value="">مكان مين؟</option>${mates.map(p=>`<option value="${p.id}" ${x.cv===p.id?'selected':''}>تغطية مكان ${h(p.name)}</option>`).join('')}</select><button class="x" data-act="rmEn" data-k="${k}" data-i="${i}" aria-label="شيل">−</button></div>
-        <div class="r"><select ${at(k,'a',i)} aria-label="الأكونت"><option value="">الأكونت</option>${list.map(cl=>`<option value="${cl.id}" ${x.a===cl.id?'selected':''}>${h(cl.name)}</option>`).join('')}</select><select ${at(k,'t',i)} aria-label="المهمة">${c.t.map(o=>`<option ${(x.t||c.t[0])===o?'selected':''}>${o}</option>`).join('')}</select></div>
-        ${conf(k,c,x,i)}</div>`}).join('')}
-     <div><button class="btn sm" data-act="addCv" data-k="${k}" data-e="${e.id}">+ تغطية</button></div></div>`};
+     ${cov.map(([x,i])=>coverRow(k,c,x,i,mates)).join('')}
+     ${extraUI(e.id,k)}${tools(e.id,k,`<button class="btn xs" data-act="addCv" data-k="${k}" data-e="${e.id}">+ تغطية</button>`)}</div>`};
   // التصوير والمونتاج والإعلانات: مهام لكل واحد بالأكونت
   const freeCard=(k,c,e)=>{const L=D[k]||[],mine=L.map((x,i)=>[x,i]).filter(([x])=>x.e===e.id);
-    return `<details class="en-row" ${mine.length?'open':''}><summary><b>${h(e.name)}</b>${mine.length?` <span class="small muted">· ${mine.length} مهمة</span>`:''}</summary><div class="stack" style="gap:8px;margin-top:6px">
+    const xo=xCard(e.id)===k&&(()=>{const X=D.extra[e.id]??xtraOf(e.id),sh=S.xShow?.[e.id]||{};return X.t||X.msg||sh.t||sh.m})();
+    return `<details class="en-row" ${mine.length||xo?'open':''}><summary><b>${h(e.name)}</b>${mine.length?` <span class="small muted">· ${mine.length} مهمة</span>`:''}</summary><div class="stack" style="gap:8px;margin-top:6px">
      ${mine.map(([x,i])=>`<div class="acc-t"><div class="r"><select ${at(k,'a',i)} aria-label="الأكونت"><option value="">الأكونت</option>${accs.map(cl=>`<option value="${cl.id}" ${x.a===cl.id?'selected':''}>${h(cl.name)}</option>`).join('')}</select>
        ${c.t?`<select ${at(k,'t',i)} aria-label="النوع" style="flex:0 1 110px">${c.t.map(o=>`<option ${(x.t||c.t[0])===o?'selected':''}>${o}</option>`).join('')}</select>`:''}
        ${c.n?`<input ${at(k,'n',i)} type="number" min="0" inputmode="numeric" placeholder="${c.n}" value="${x.n??''}" aria-label="${c.n}" style="width:96px">`:''}
@@ -1074,10 +1086,18 @@ function vAtt(){
        ${c.link?`<input ${at(k,'link',i)} dir="ltr" placeholder="${c.link}" value="${h(x.link||'')}" aria-label="${c.link}">`:''}
        ${c.note?`<input ${at(k,'note',i)} placeholder="${c.note}" value="${h(x.note||'')}" aria-label="ملاحظة">`:''}
        ${conf(k,c,x,i)}</div>`).join('')}
-     <div><button class="btn sm" data-act="addEnE" data-k="${k}" data-e="${e.id}">${c.add}</button></div></div></details>`};
+     ${extraUI(e.id,k)}${tools(e.id,k,`<button class="btn xs" data-act="addEnE" data-k="${k}" data-e="${e.id}">+ مهمة</button>`)}</div></details>`};
   const block=(k,c)=>{const ppl=pplOf(k,c);return `<div class="panel"><h3>${c.title}</h3><p class="small muted" style="margin:4px 0 10px">${c.hint}</p>
    <div class="stack" style="gap:10px">${ppl.length?ppl.map(e=>c.asg?distCard(k,c,e):freeCard(k,c,e)).join(''):`<p class="small muted">مفيش حد في الفريق بالبوزيشن ده.</p>`}</div></div>`};
-  const others=S.emps.filter(e=>!isOwnerEmp(e));
+  const inSec=new Set([...['posts','designs','shoots','edits','ads'].flatMap(k=>pplOf(k,EN[k]).map(e=>e.id)),...mods.map(e=>e.id)]);
+  const leads=S.emps.filter(isLead),restP=S.emps.filter(e=>!isLead(e)&&!inSec.has(e.id));
+  // المدير والتيم ليدر: ممكن يغطوا مكان أي حد في الكريتور أو الديزاين
+  const leadCard=e=>{const secs=['posts','designs'].filter(k=>!EN[k].roles.some(r=>has(e,r)));
+    const rows=secs.flatMap(k=>(D[k]||[]).map((x,i)=>[k,x,i]).filter(([,x])=>x.e===e.id&&x.cv!=null));
+    const btns=secs.map(k=>`<button class="btn xs" data-act="addCv" data-k="${k}" data-e="${e.id}">+ تغطية ${k==='posts'?'كريتور':'ديزاين'}</button>`).join('');
+    return `<div class="en-row"><div><b>${h(e.name)}</b> <span class="small muted">${isOwn(e)?'المدير':h(rolesTxt(e))}</span></div>
+     ${rows.map(([k,x,i])=>`<div class="small" style="font-weight:600">${k==='posts'?'تغطية كريتور':'تغطية ديزاين'}</div>${coverRow(k,EN[k],x,i,S.emps.filter(p=>p.id!==e.id&&EN[k].roles.some(r=>has(p,r))))}`).join('')}
+     ${isOwn(e)?'':extraUI(e.id,'lead')}${isOwn(e)?`<div class="row between" style="gap:6px"><div class="row" style="gap:4px">${btns}</div><button class="btn sm primary" data-act="saveAtt">حفظ</button></div>`:tools(e.id,'lead',btns)}</div>`};
   return `<div class="stack">
   <div class="row between"><h2>المتابعة اليومية</h2><div class="row"><input type="date" id="attDate" value="${d}" style="width:auto"><span class="pill ${saved?'paid':'none'}">${saved?'متسجّلة':'لسه ماتسجّلتش'}</span></div></div>
   ${isFri(d)?'<div class="notice">الجمعة إجازة: مفيش بصمة، ومش بيتحسب غياب أو تأخير.</div>':''}
@@ -1088,14 +1108,13 @@ function vAtt(){
    <div class="list">${mods.map(e=>{const x=D.mods[e.id]||{s:'done'},off=x.s==='absent';return `<div class="item" style="align-items:flex-start"><div style="flex:0 0 140px"><b>${h(e.name)}</b>${punch(e.id,d)}</div>
     <div class="stack grow" style="gap:8px"><div class="seg">${[['done','تم ✓','p'],['absent','غاب','a']].map(([k,nm,c])=>`<button class="${x.s===k?'on '+c:''}" data-act="modS" data-e="${e.id}" data-s="${k}">${nm}</button>`).join('')}</div>
     <div class="small"><span class="muted">جولات المتابعة:</span> <span style="display:inline-flex;gap:4px;flex-wrap:wrap">${mrChips(S.checks?.[e.id]?.[d]?.mr,d)}</span></div>
-    ${off?`<div class="field"><label class="label" for="md_cv_${e.id}">مين غطّى مكانه؟</label><select id="md_cv_${e.id}" data-mod="${e.id}">${empOpts(x.cover,e.id)}</select></div>`:''}</div></div>`}).join('')||'<p class="small muted">مفيش موديريتور في الفريق.</p>'}</div></div>
+    ${off?`<div class="field"><label class="label" for="md_cv_${e.id}">مين غطّى مكانه؟</label><select id="md_cv_${e.id}" data-mod="${e.id}">${empOpts(x.cover,e.id)}</select></div>`:''}${extraUI(e.id,'mods')}${tools(e.id,'mods')}</div></div>`}).join('')||'<p class="small muted">مفيش موديريتور في الفريق.</p>'}</div></div>
   ${block('shoots',EN.shoots)}
   ${block('edits',EN.edits)}
   ${block('ads',EN.ads)}
-  <div class="panel"><h3>مهام تانية ورسايل</h3><p class="small muted" style="margin:4px 0 10px">لأي حد في التيم: مهمة زيادة (كل مهمة في سطر) ورسالة. بتظهرله في «صفحتي» تحت مهامه.</p>
-   <div class="stack" style="gap:6px">${others.map(e=>{const X=D.extra[e.id]??xtraOf(e.id),n=X.t.split('\n').filter(z=>z.trim()).length;return `<details class="xt" ${n||X.msg?'open':''}><summary><b>${h(e.name)}</b> <span class="small muted">${h(rolesTxt(e))}${n?' · '+n+' مهمة':''}${X.msg?' · رسالة':''}</span></summary>
-    <div class="stack" style="gap:6px;margin-top:6px"><textarea id="xt_${e.id}" data-xt="${e.id}" rows="2" placeholder="مهمة تانية، كل مهمة في سطر">${h(X.t)}</textarea><input id="xm_${e.id}" data-xm="${e.id}" value="${h(X.msg)}" placeholder="رسالة ليه (اختياري)"></div></details>`}).join('')}</div></div>
-  <div class="row"><button class="btn" data-act="saveAtt">حفظ</button>${pend?`<span class="small muted">${pend} مهمة لسه مستنية تأكيدك</span>`:''}</div>
+  ${leads.length?`<div class="panel"><h3>الإدارة والتيم ليدر</h3><p class="small muted" style="margin:4px 0 0">لو المدير أو التيم ليدر هيغطي مكان حد، دوس «+ تغطية» تحت اسمه واختار مكان مين والأكونت والمهمة.</p><div class="stack" style="gap:8px;margin-top:8px">${leads.map(leadCard).join('')}</div></div>`:''}
+  ${restP.length?`<div class="panel"><h3>باقي التيم</h3><div class="stack" style="gap:8px;margin-top:8px">${restP.map(e=>`<div class="en-row"><div><b>${h(e.name)}</b> <span class="small muted">${h(rolesTxt(e))}</span></div>${extraUI(e.id,'rest')}${tools(e.id,'rest')}</div>`).join('')}</div></div>`:''}
+
   ${isFri(d)?'':closedOk(d)?`<div class="panel row between" style="border-color:var(--good)"><div><b style="color:var(--good)">اليوم اتقفل ✓</b><div class="small muted">الساعة <span class="num">${closedTime(d)}</span>${day.closedBy?' · '+h(day.closedBy):''}</div></div>${d===today()?'<button class="btn sm" data-act="saveAtt">حفظ تعديل</button>':''}</div>`
    :d===today()?`<div class="panel stack" style="border-color:var(--accent)"><b>إنهاء اليوم</b><p class="small muted" style="margin:0">قبل ما تقفل اليوم أكّد على كل مهمة «تم فعلاً» أو «متمّتش». لازم قبل الساعة 11:59 بالليل، وإلا اليوم بيتخصم من التيم ليدر. لو التيم ليدر غايب، أحمد عاصم بيغطي ويقفل اليوم.</p>${pend?`<div class="notice" style="margin:0">فاضل ${pend} مهمة من غير تأكيد.</div>`:''}<button class="btn primary" data-act="closeDay" style="justify-content:center;padding:12px;font-size:16px">إنهاء اليوم ✓</button></div>`
    :d<today()&&S.att[d]?.closedAt?`<div class="notice">اليوم ده اتقفل متأخر (بعد 11:59 بالليل).</div>`:d<today()?`<div class="notice" style="background:var(--bad-soft)">اليوم ده ماتقفلش.</div>`:''}
@@ -1379,7 +1398,7 @@ document.addEventListener('change',e=>{
   const t=e.target;
   if(t.id==='qa_role'){S.lastRole=t.value;return}
   if(t.dataset.en&&(t.dataset.f==='e'||t.dataset.f==='cv')&&S.attDraft){const x=S.attDraft[t.dataset.en]?.[+t.dataset.i];if(x){x[t.dataset.f]=t.value;const c=EN[t.dataset.en];if(c.asg){const al=accsFor(x.cv||x.e,c.asg);if(al.length&&!al.includes(x.a))x.a=''}}t.blur();render();return}
-  if(t.id==='attDate'){S.attDate=t.value||today();S.attDraft=null;if(S.taskDate!==S.attDate){S.taskDate=S.attDate;subTasks()}const m=S.attDate.slice(0,7);if(m!==S.month){S.month=m;subMonth()}t.blur();render();return}
+  if(t.id==='attDate'){S.attDate=t.value||today();S.attDraft=null;S.xShow={};S.xCard={};if(S.taskDate!==S.attDate){S.taskDate=S.attDate;subTasks()}const m=S.attDate.slice(0,7);if(m!==S.month){S.month=m;subMonth()}t.blur();render();return}
   if(t.id==='taskDate'){S.taskDate=t.value||today();subTasks();t.blur();render();return}
   if(t.dataset.att)(S.attDraft.rows[t.dataset.e]??={s:'present'})[t.dataset.att]=t.value||null;
   if(t.dataset.dg){const x=S.attDraft.designs[+t.dataset.i];if(x)x[t.dataset.dg]=t.dataset.dg==='n'?(t.value===''?'':+t.value):t.value}
@@ -1547,6 +1566,7 @@ document.addEventListener('click',async e=>{
   if(a==='rmPs'){S.attDraft.posts.splice(+b.dataset.i,1);render();return}
   if(a==='addEn'){const k=b.dataset.k,c=EN[k],L=S.attDraft[k],last=L[L.length-1];L.push({e:last?.e||S.emps.find(x=>c.roles.some(r=>has(x,r)))?.id||S.emps[0]?.id,cv:last?.cv||'',a:'',...(c.t?{t:c.t[0]}:{})});render();return}
   if(S.attDraft&&['enTog','enNone','addCv','addEnE','enOk','rmEn','modS','addAd','rmAd'].includes(a))S.attDraft.dirty=1;
+  if(a==='xAdd'){const e=b.dataset.e;(S.xCard??={})[e]=b.dataset.k;((S.xShow??={})[e]??={})[b.dataset.w]=1;render();setTimeout(()=>document.getElementById((b.dataset.w==='t'?'xt_':'xm_')+e)?.focus(),30);return}
   if(a==='enTog'){const L=S.attDraft[b.dataset.k],{e,a:acc,t}=b.dataset,i=L.findIndex(x=>x.e===e&&x.a===acc&&x.t===t&&x.cv==null);if(i>=0)L.splice(i,1);else L.push({e,a:acc,t});render();return}
   if(a==='enNone'){const k=b.dataset.k;S.attDraft[k]=S.attDraft[k].filter(x=>!(x.e===b.dataset.e&&x.a===b.dataset.a&&x.cv==null));render();return}
   if(a==='addCv'){const c=EN[b.dataset.k];S.attDraft[b.dataset.k].push({e:b.dataset.e,cv:'',a:'',t:c.t[0]});render();return}
