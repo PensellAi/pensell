@@ -1061,7 +1061,7 @@ function vAtt(){
   const xCard=eid=>S.xCard?.[eid]||cardsOf(eid)[0];
   const extraUI=(eid,k)=>{if(xCard(eid)!==k)return '';const X=D.extra[eid]??xtraOf(eid),sh=S.xShow?.[eid]||{};
     return `${X.t||sh.t?`<textarea id="xt_${eid}" data-xt="${eid}" rows="2" placeholder="مهمة تانية، كل مهمة في سطر">${h(X.t)}</textarea>`:''}${X.msg||sh.m?`<input id="xm_${eid}" data-xm="${eid}" value="${h(X.msg)}" placeholder="ملاحظة أو رسالة ليه">`:''}`};
-  const tools=(eid,k)=>`<div class="row between" style="gap:6px"><div class="row" style="gap:4px"><button class="btn xs" data-act="xAdd" data-e="${eid}" data-k="${k}" data-w="t">+ مهمة تانية</button><button class="btn xs" data-act="xAdd" data-e="${eid}" data-k="${k}" data-w="m">+ ملاحظة</button></div><button class="btn sm primary" data-act="saveAtt">حفظ</button></div>`;
+  const tools=(eid,k,first)=>`<div class="row between" style="gap:6px"><div class="row" style="gap:4px">${first||''}<button class="btn xs" data-act="xAdd" data-e="${eid}" data-k="${k}" data-w="t">+ مهمة تانية</button><button class="btn xs" data-act="xAdd" data-e="${eid}" data-k="${k}" data-w="m">+ ملاحظة</button></div><button class="btn sm primary" data-act="saveAtt">حفظ</button></div>`;
   const chipsFor=(k,c,on,attrs)=>`<div class="chips"><button class="chip ${on.length?'':'on'}" ${attrs('none')}>ولا حاجة</button>${c.t.map(t=>`<button class="chip ${on.some(([x])=>x.t===t)?'on':''}" ${attrs('tog',t)}>${t}</button>`).join('')}</div>
        ${on.map(([x,i])=>`<div class="conf"><span class="small" style="font-weight:600">${h(x.t)}</span>${conf(k,c,x,i)}</div>`).join('')}`;
   // الكريتور والديزاينر: أكونتاته المتوزعة + المطلوب من كل أكونت
@@ -1070,7 +1070,8 @@ function vAtt(){
     return `<div class="en-row"><b>${h(e.name)}</b>
      ${accIds.length?accIds.map(a=>`<div class="acc-t"><div class="small" style="font-weight:600">${h(clName(a))}</div>${chipsFor(k,c,own.filter(([x])=>x.a===a),(w,t)=>w==='none'?`data-act="enNone" data-k="${k}" data-e="${e.id}" data-a="${a}"`:`data-act="enTog" data-k="${k}" data-e="${e.id}" data-a="${a}" data-t="${t}"`)}</div>`).join('')
       :'<div class="small muted">مفيش أكونتات متوزعة عليه الشهر ده. وزّعها من «التوزيع».</div>'}
-     ${extraUI(e.id,k)}${tools(e.id,k)}</div>`};
+     ${(D.covers||[]).map((C,ci)=>hostOf(C)===k&&C.e===e.id?coverUI(ci,1):'').join('')}
+     ${extraUI(e.id,k)}${tools(e.id,k,`<button class="btn xs" data-act="cvAdd" data-host="${k}" data-e="${e.id}">+ تغطية</button>`)}</div>`};
   // التصوير والمونتاج والإعلانات: سطور (الموظف / الأكونت / العدد أو اللينك والمبلغ)
   const freeBlock=(k,c)=>{const L=D[k]||[],ppl=S.emps.filter(e=>c.roles.some(r=>has(e,r)));
     return `<div class="panel"><h3>${c.title}</h3><p class="small muted" style="margin:4px 0 10px">${c.hint}</p>
@@ -1087,18 +1088,20 @@ function vAtt(){
    <div class="stack" style="gap:10px">${ppl.length?ppl.map(e=>distCard(k,c,e)).join(''):`<p class="small muted">مفيش حد في الفريق بالبوزيشن ده.</p>`}</div></div>`};
   // كارت التغطية: الموظف (من التيم كله) / غطّى مكان مين / أكونتات اللي غاب والمطلوب منها / ملاحظة
   D.covers??=[];for(const k of ['posts','designs'])for(const x of D[k]||[])if(x.cv&&!D.covers.some(p=>p.e===x.e&&p.cv===x.cv))D.covers.push({e:x.e,cv:x.cv});
-  const coverPanel=()=>`<div class="panel"><h3>كارت التغطية</h3><p class="small muted" style="margin:4px 0 10px">لو حد غاب: دوس «+ تغطية» واختار الموظف اللي هيغطي ومكان مين. هتظهر أكونتات اللي غاب، اختار المطلوب من كل أكونت، واللي غطّى ياخد حسابها.</p>
-    <div class="stack" style="gap:10px">${D.covers.map((C,ci)=>{const ab=C.cv?emp(C.cv):null;let body='';
+  const hostOf=C=>C.host||(C.e&&pplOf('posts',EN.posts).some(e=>e.id===C.e)?'posts':C.e&&pplOf('designs',EN.designs).some(e=>e.id===C.e)?'designs':'panel');
+  const coverUI=(ci,fixed)=>{const C=D.covers[ci];const ab=C.cv?emp(C.cv):null;let body='';
       if(ab&&C.e){for(const k of ['posts','designs']){const c=EN[k],mine=(D[k]||[]).map((x,i)=>[x,i]).filter(([x])=>x.e===C.e&&x.cv===C.cv);if(!c.roles.some(r=>has(ab,r))&&!mine.length)continue;
           const accIds=[...new Set([...accsFor(C.cv,c.asg),...mine.map(([x])=>x.a)])].filter(a=>cli(a));
           body+=`<div class="small muted">${k==='posts'?'أكونتات الكريتور':'أكونتات الديزاين'}</div>`+(accIds.length?accIds.map(a=>`<div class="acc-t"><div class="small" style="font-weight:600">${h(clName(a))}</div>${chipsFor(k,c,mine.filter(([x])=>x.a===a),(w,t)=>w==='none'?`data-act="cvNone" data-k="${k}" data-c="${ci}" data-a="${a}"`:`data-act="cvTog" data-k="${k}" data-c="${ci}" data-a="${a}" data-t="${t}"`)}</div>`).join(''):'<div class="small muted">مفيش أكونتات متوزعة عليه.</div>')}
         if(has(ab,'moderator')){const m=D.mods[C.cv],on=m?.s==='absent'&&m.cover===C.e;body+=`<div class="chips"><button class="chip ${on?'on':''}" data-act="cvMod" data-c="${ci}">غطّى الموديريشن بتاعه</button></div>`}}
       return `<div class="en-row" style="background:var(--accent-soft)">
-       <div class="r"><select id="cv_e_${ci}" data-cvf="e" data-c="${ci}" aria-label="الموظف"><option value="">الموظف</option>${S.emps.map(e=>`<option value="${e.id}" ${C.e===e.id?'selected':''}>${h(e.name)}</option>`).join('')}</select>
+       <div class="r">${fixed?`<span class="small" style="font-weight:600;flex:none">تغطية</span>`:`<select id="cv_e_${ci}" data-cvf="e" data-c="${ci}" aria-label="الموظف"><option value="">الموظف</option>${S.emps.map(e=>`<option value="${e.id}" ${C.e===e.id?'selected':''}>${h(e.name)}</option>`).join('')}</select>`}
         <select id="cv_cv_${ci}" data-cvf="cv" data-c="${ci}" aria-label="غطّى مكان مين"><option value="">غطّى مكان مين؟</option>${S.emps.filter(e=>e.id!==C.e).map(e=>`<option value="${e.id}" ${C.cv===e.id?'selected':''}>مكان ${h(e.name)}</option>`).join('')}</select>
         <button class="x" data-act="cvRm" data-c="${ci}" aria-label="شيل">−</button></div>
        ${body}
-       ${C.note||S.cnShow?.[ci]?`<input id="cv_n_${ci}" data-cvf="note" data-c="${ci}" value="${h(C.note||'')}" placeholder="ملاحظة">`:`<div><button class="btn xs" data-act="cvNote" data-c="${ci}">+ ملاحظة</button></div>`}</div>`}).join('')||'<p class="small muted" style="margin:0">مفيش تغطية النهارده.</p>'}</div>
+       ${C.note||S.cnShow?.[ci]?`<input id="cv_n_${ci}" data-cvf="note" data-c="${ci}" value="${h(C.note||'')}" placeholder="ملاحظة">`:`<div><button class="btn xs" data-act="cvNote" data-c="${ci}">+ ملاحظة</button></div>`}</div>`};
+  const coverPanel=()=>`<div class="panel"><h3>كارت التغطية</h3><p class="small muted" style="margin:4px 0 10px">لو حد غاب: دوس «+ تغطية» واختار الموظف اللي هيغطي ومكان مين. هتظهر أكونتات اللي غاب، اختار المطلوب من كل أكونت، واللي غطّى ياخد حسابها.</p>
+    <div class="stack" style="gap:10px">${D.covers.map((C,ci)=>hostOf(C)==='panel'?coverUI(ci):'').join('')||'<p class="small muted" style="margin:0">مفيش تغطية هنا النهارده.</p>'}</div>
     <div class="row between" style="gap:6px;margin-top:8px"><button class="btn xs" data-act="cvAdd">+ تغطية</button><button class="btn sm primary" data-act="saveAtt">حفظ</button></div></div>`;
   return `<div class="stack">
   <div class="row between"><h2>المتابعة اليومية</h2><div class="row"><input type="date" id="attDate" value="${d}" style="width:auto"><span class="pill ${saved?'paid':'none'}">${saved?'متسجّلة':'لسه ماتسجّلتش'}</span></div></div>
@@ -1576,7 +1579,7 @@ document.addEventListener('click',async e=>{
   if(S.attDraft&&['enTog','enNone','addCv','addEnE','enOk','rmEn','modS','addAd','rmAd','addEn','cvAdd','cvRm','cvTog','cvNone','cvMod'].includes(a))S.attDraft.dirty=1;
   if(a==='nAdd'){(S.nShow??={})[b.dataset.k+'_'+b.dataset.i]=1;render();setTimeout(()=>document.getElementById(`en_${b.dataset.k}_note_${b.dataset.i}`)?.focus(),30);return}
   if(a==='cvNote'){(S.cnShow??={})[b.dataset.c]=1;render();setTimeout(()=>document.getElementById('cv_n_'+b.dataset.c)?.focus(),30);return}
-  if(a==='cvAdd'){S.attDraft.covers.push({e:'',cv:'',note:''});render();return}
+  if(a==='cvAdd'){S.attDraft.covers.push(b.dataset.e?{e:b.dataset.e,cv:'',note:'',host:b.dataset.host}:{e:'',cv:'',note:'',host:'panel'});render();return}
   if(a==='cvRm'){const D=S.attDraft,C=D.covers[+b.dataset.c];if(C){for(const k of ['posts','designs'])D[k]=D[k].filter(x=>!(x.e===C.e&&x.cv===C.cv));if(C.cv&&D.mods[C.cv]?.cover===C.e)D.mods[C.cv]={s:'done'};D.covers.splice(+b.dataset.c,1)}render();return}
   if(a==='cvTog'||a==='cvNone'){const D=S.attDraft,C=D.covers[+b.dataset.c],k=b.dataset.k;if(!C?.e||!C?.cv)return toast('اختار الموظف ومكان مين الأول');
     if(a==='cvNone')D[k]=D[k].filter(x=>!(x.e===C.e&&x.cv===C.cv&&x.a===b.dataset.a));
