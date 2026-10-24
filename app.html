@@ -256,8 +256,8 @@ const photoDesc=r=>{if(r.photo?.desc)return r.photo.desc;const D=dailyPhoto(),sh
 const pkgTotal=r=>(r.mgmt?.on?+r.mgmt.price||0:0)+(photoOn(r)?+r.photo?.price||0:0);
 /* الحضور: من البصمة + الموديريشن + أي شغل اتسجّل في المتابعة اليومية */
 // المتابعة اليومية بقت مهام: اللي بيتحسب في المرتب والفاتورة هو اللي التيم ليدر أكّد إنه «تم فعلاً» بس
-const okX=x=>!x.id||x.ok===true;let _attK=null,_attV=null;
-function ATT(){if(_attK===S.att)return _attV;const o={};for(const[k,d]of Object.entries(S.att||{})){o[k]={...d};for(const f of ['posts','designs','shoots','edits','ads'])o[k][f]=(d[f]||[]).filter(x=>okX(x)&&!(f==='posts'&&x.t==='ميتنج'))}_attK=S.att;_attV=o;return o}
+const okX=x=>!x.id||x.ok===true||(x.ok===false&&!!x.by);let _attK=null,_attV=null;
+function ATT(){if(_attK===S.att)return _attV;const o={};for(const[k,d]of Object.entries(S.att||{})){o[k]={...d};for(const f of ['posts','designs','shoots','edits','ads'])o[k][f]=(d[f]||[]).filter(x=>(f==='posts'||f==='designs'?okX(x):!x.id||x.ok===true)&&!(f==='posts'&&x.t==='ميتنج'))}_attK=S.att;_attV=o;return o}
 const ownerEmpId=()=>(S.emps.find(isOwnerEmp)||emp('ahmed-assem'))?.id||null;
 const closedOk=d=>{const x=S.att?.[d];if(!x?.closedAt)return false;const t=x.closedAt;if(t&&t.toDate){const z=t.toDate();return z.getFullYear()+'-'+String(z.getMonth()+1).padStart(2,'0')+'-'+String(z.getDate()).padStart(2,'0')===d}return x.closedDay===d};
 const closedTime=d=>{const t=S.att?.[d]?.closedAt;return t&&t.toDate?hm(t.toDate()):(typeof t==='string'?t:'')};
@@ -302,7 +302,10 @@ const OWNER_EMAILS=['ahmedassemads@gmail.com'];
 let db=null,auth=null,unsubMine=null;
 const hm=d=>String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
 const tStr=x=>!x?'':typeof x==='string'?x:x.toDate?hm(x.toDate()):'';
-const normLog=log=>{const o={};for(const[k,v]of Object.entries(log||{}))o[k]={in:tStr(v?.in),out:tStr(v?.out)};return o};
+const normLog=log=>{const o={};for(const[k,v]of Object.entries(log||{}))o[k]={in:tStr(v?.in),out:tStr(v?.out),mr:Object.fromEntries(Object.entries(v?.mr||{}).map(([r,t])=>[r,tStr(t)]))};return o};
+// متابعة الموديريتور: جولة كل ساعتين من 12 الضهر لـ 10 بالليل
+const MR=[12,14,16,18,20,22],mrLbl=r=>(r>12?r-12:r)+(r<17?' الضهر':' بالليل'),curRound=()=>{const h=new Date().getHours();return h<12?null:Math.min(22,h-(h%2))};
+const mrChips=(mr,d)=>{const cr=d===today()?curRound():d<today()?99:null;return MR.map(r=>{const t=mr?.[r];return `<span class="pill ${t?'paid':cr!=null&&r<cr?'red':'none'}" style="font-size:12px">${t?'✓ ':''}${r>12?r-12:r}${t?' · '+t:cr!=null&&r<cr?' ✗':''}</span>`}).join(' ')};
 const SNAP={serverTimestamps:'estimate'};
 const mainEl=()=>document.getElementById('main');
 function screen(html){S.mode='screen';document.getElementById('tabs').hidden=true;document.getElementById('monthBox').hidden=true;mainEl().innerHTML=html}
@@ -547,6 +550,11 @@ const atTxt=ms=>{const z=new Date(ms);return (z.toDateString()===new Date().toDa
 function asksInbox(){const L=openAsks();
   return `<div class="panel" style="border-color:${L.length?'var(--accent)':'var(--line)'}"><div class="row between"><h3>🚩 حاجات واقفة مع التيم</h3>${L.length?`<span class="pill unpaid">${L.length}</span>`:''}</div>
    ${L.length?`<div class="list" style="margin-top:6px">${L.map(x=>`<div class="item" style="align-items:flex-start"><div class="grow" style="min-width:0"><b>${h(x.name)}</b> <span class="small muted">${atTxt(x.at)}</span><div style="white-space:pre-wrap;overflow-wrap:anywhere;margin-top:2px">${linkify(x.t)}</div></div><button class="btn sm" data-act="askDone" data-e="${x.emp}" data-id="${x.id}">تمام ✓</button></div>`).join('')}</div>`:'<p class="small muted" style="margin:6px 0 0">مفيش حاجة واقفة مع حد دلوقتي.</p>'}</div>`}
+function modPanel(p){const cr=curRound(),mr=p.mr||{},done=MR.filter(r=>mr[r]).length;
+  return `<div class="panel stack" style="gap:8px"><div class="row between"><h3>💬 متابعة الكومنتس والرسايل</h3><span class="pill ${done?'paid':'none'}">${done} من ${MR.length}</span></div>
+   <p class="small muted" style="margin:0">مهمتك الثابتة: تتابع الكومنتس والرسايل طول اليوم من 12 الضهر لـ 10 بالليل. كل ساعتين هيوصلك إشعار، رد على كل حاجة جديدة ودوس الزرار ده.</p>
+   <div style="display:flex;gap:4px;flex-wrap:wrap">${mrChips(mr,today())}</div>
+   ${cr==null?'<div class="small muted">أول جولة الساعة 12 الضهر.</div>':mr[cr]?`<div class="pill paid" style="text-align:center;padding:10px">جولة ${mrLbl(cr)} اتسجّلت ✓ · الجاية ${cr<22?mrLbl(cr+2):'بكرة 12 الضهر'}</div>`:`<button class="btn primary" data-act="modRound" data-r="${cr}" style="justify-content:center;padding:12px;font-size:16px">رديت على الكومنتس والرسايل ✓ · جولة ${mrLbl(cr)}</button>`}</div>`}
 function askBox(){const mine=(S.myAsks||[]).slice(-3).reverse();
   return `<div class="panel stack" style="gap:8px"><h3>فيه حاجة واقفة معاك؟</h3>
    <textarea id="ask_t" rows="3" placeholder="لو فيه حاجة واقفة معاك، لو محتاج ميتنج / تصوير / طلب إجازة / استئذان بدري… اكتب هنا"></textarea>
@@ -581,7 +589,8 @@ function vCheckin(){
    ${notifBanner()}
    ${T?.msg?`<div class="panel" style="border-color:var(--accent);background:var(--accent-soft)"><div class="label" style="color:var(--accent)">رسالة ليك${T.byName?' من '+h(T.byName):''}</div><div style="white-space:pre-wrap;margin-top:4px">${h(T.msg)}</div></div>`:''}
    <div class="panel"><div class="row between"><h3>مهام النهارده</h3>${items.length?`<span class="pill ${doneN===items.length?'paid':'unpaid'}">${doneN} من ${items.length}</span>`:''}</div>
-    ${items.length?`<div class="list" style="margin-top:6px">${items.map((x,i)=>`<label class="item" style="cursor:pointer;gap:10px;align-items:flex-start"><input type="checkbox" data-act="taskDone" data-i="${i}" ${x.done?'checked':''} style="margin-top:4px"><span class="grow" style="min-width:0"><span style="${x.done?'text-decoration:line-through;color:var(--muted)':''}">${h(x.t)}</span>${x.link?`<div class="small" style="overflow-wrap:anywhere"><a href="${h(x.link)}" target="_blank" rel="noopener" dir="ltr">${h(x.link)}</a></div>`:''}${x.note?`<div class="small muted" style="white-space:pre-wrap;overflow-wrap:anywhere">${linkify(x.note)}</div>`:''}${x.ok===true?'<div class="small" style="color:var(--good)">التيم ليدر أكّد إنها تمت ✓</div>':x.ok===false?'<div class="small" style="color:var(--bad)">التيم ليدر علّم إنها متمّتش</div>':''}</span></label>`).join('')}</div>`:'<p class="small muted" style="margin:6px 0 0">مفيش مهام متسجّلة ليك النهارده.</p>'}</div>
+    ${items.length?`<div class="list" style="margin-top:6px">${items.map((x,i)=>`<label class="item" style="cursor:pointer;gap:10px;align-items:flex-start"><input type="checkbox" data-act="taskDone" data-i="${i}" ${x.done?'checked':''} style="margin-top:4px"><span class="grow" style="min-width:0"><span style="${x.done?'text-decoration:line-through;color:var(--muted)':''}">${h(x.t)}</span>${x.link?`<div class="small" style="overflow-wrap:anywhere"><a href="${h(x.link)}" target="_blank" rel="noopener" dir="ltr">${h(x.link)}</a></div>`:''}${x.note?`<div class="small muted" style="white-space:pre-wrap;overflow-wrap:anywhere">${linkify(x.note)}</div>`:''}${x.ok===true?'<div class="small" style="color:var(--good)">التيم ليدر أكّد إنها تمت ✓</div>':x.ok===false&&x.byEmp?`<div class="small" style="color:var(--gold)">متمّتش بسبب تأخير من ${h(x.byEmp)}${x.why?' ('+h(x.why)+')':''} · مش هتتخصم منك</div>`:x.ok===false?`<div class="small" style="color:var(--bad)">التيم ليدر علّم إنها متمّتش${x.why?' · '+h(x.why):''}</div>`:''}</span></label>`).join('')}</div>`:'<p class="small muted" style="margin:6px 0 0">مفيش مهام متسجّلة ليك النهارده.</p>'}</div>
+   ${has(e,'moderator')?modPanel(p):''}
    ${askBox()}
    <div class="panel"><h3>أكونتاتك في ${mName(m)}</h3>${acc.length?`<div class="list" style="margin-top:6px">${acc.map(a=>`<div class="item"><b class="grow">${h(a.c)}</b><span class="pkg on">${h(a.r)}</span>${a.from>1||a.to?`<span class="small muted">من يوم ${a.from||1}${a.to?' لـ '+a.to:''}</span>`:''}</div>`).join('')}</div>`:'<p class="small muted" style="margin:6px 0 0">لسه مفيش أكونتات متوزعة عليك الشهر ده.</p>'}</div>
    <div class="panel"><h3>${mName(m)} · ${days.length} يوم</h3>${lates||soft?`<p class="small" style="margin:4px 0 0">${lates?`<span class="minus">${lates} تأخير عليه خصم</span>`:''}${lates&&soft?' · ':''}${soft?`${soft} تأخير ملاحظة`:''}</p>`:''}${days.length?`<div class="tbl" style="margin-top:8px"><table><thead><tr><th>اليوم</th><th>حضور</th><th>انصراف</th><th>مدة</th></tr></thead><tbody>${days.map(([k,x])=>`<tr><td>${dLong(k)}</td><td class="num">${x.in||'—'} ${lateKind(x.in)==='hard'?'<span class="minus">●</span>':lateKind(x.in)==='soft'?'<span style="color:var(--gold)">●</span>':''}</td><td class="num">${x.out||'—'}</td><td class="num">${dur(x.in,x.out)}</td></tr>`).join('')}</tbody></table></div>`:'<p class="small muted">لسه مفيش أيام متسجّلة الشهر ده.</p>'}</div></div>`;
@@ -727,7 +736,7 @@ let pushSyncJ='',pushSyncT=0;const schedSync=()=>{clearTimeout(pushSyncT);pushSy
 // بيتأكد إن السيرفر متحدّث وفيه التذكيرات قبل ما يبعتله (السيرفر القديم كان هيعتبرها رسالة شات)
 let remOK=null;const remReady=async()=>{if(remOK===null){try{remOK=!!(await (await fetch(pushUrl())).json()).kv}catch(_){remOK=false;setTimeout(()=>remOK=null,60000)}}return remOK};
 async function pushSync(){if(!S.me||!S.email||!auth.currentUser||!await remReady())return;try{
-  const d=today(),body={action:'sync',name:S.me.name||'',ci:(S.myLog||{})[d]?.in?d:''};
+  const d=today(),body={action:'sync',name:S.me.name||'',ci:(S.myLog||{})[d]?.in?d:'',mod:has(S.me,'moderator')};
   if(S.myTaskLoaded===d){const it=S.myTask?.items||[];body.td={d,n:it.length,k:it.filter(x=>x.done).length}}
   if(notifPerm()==='granted'&&'serviceWorker' in navigator){const reg=await navigator.serviceWorker.ready;const sb=reg.pushManager&&await reg.pushManager.getSubscription();if(sb)body.sub=sb.toJSON()}
   const j=JSON.stringify(body);if(j===pushSyncJ)return;
@@ -1042,7 +1051,8 @@ function vAtt(){
      ${c.link?`<input ${at('link')} dir="ltr" placeholder="${c.link}" value="${h(x.link||'')}" aria-label="${c.link}">`:''}
      ${c.note?`<input ${at('note')} placeholder="${c.note}" value="${h(x.note||'')}" aria-label="ملاحظة">`:''}
      <div class="row between" style="gap:6px"><span class="small ${eDone?'':'muted'}" style="${eDone?'color:var(--good)':''}">${!x.id?'جديدة · لسه ماتحفظتش':eDone?'الموظف علّم إنها خلصت ✓':'الموظف لسه ماعلّمش عليها'}</span>
-      <div class="seg">${[[true,'تم فعلاً ✓','p'],[false,'متمّتش','a']].map(([v,nm,cl])=>`<button class="${x.ok===v?'on '+cl:''}" data-act="enOk" data-k="${k}" data-i="${i}" data-v="${v?1:0}">${nm}</button>`).join('')}</div></div></div>`};
+      <div class="seg">${[[true,'تم فعلاً ✓','p'],[false,'متمّتش','a']].map(([v,nm,cl])=>`<button class="${x.ok===v?'on '+cl:''}" data-act="enOk" data-k="${k}" data-i="${i}" data-v="${v?1:0}">${nm}</button>`).join('')}</div></div>
+     ${x.ok===false&&c.cover?`<div class="r"><select ${at('by')} aria-label="السبب من مين"><option value="">السبب منه هو · بتتخصم</option>${S.emps.filter(p=>p.id!==x.e).map(p=>`<option value="${p.id}" ${x.by===p.id?'selected':''}>تأخير من ${h(p.name)} · مش بتتخصم منه</option>`).join('')}</select><input ${at('why')} placeholder="السبب (مثلاً: الديزاين اتأخر)" value="${h(x.why||'')}" aria-label="السبب"></div>`:''}</div>`};
   const block=(k,c)=>`<div class="panel"><h3>${c.title}</h3><p class="small muted" style="margin:4px 0 10px">${c.hint}</p>
    <div class="stack" style="gap:10px">${(D[k]||[]).map((x,i)=>row(k,c,x,i)).join('')}</div>
    <button class="btn sm" data-act="addEn" data-k="${k}" style="margin-top:8px">${c.add}</button></div>`;
@@ -1056,6 +1066,7 @@ function vAtt(){
   <div class="panel"><h3>موديريشن النهارده</h3><p class="small muted" style="margin:4px 0 10px">علّم على كل موديريتور. لو غاب، اختار مين غطّى مكانه وهو اللي هياخد مرتب اليوم.</p>
    <div class="list">${mods.map(e=>{const x=D.mods[e.id]||{s:'done'},off=x.s==='absent';return `<div class="item" style="align-items:flex-start"><div style="flex:0 0 140px"><b>${h(e.name)}</b>${punch(e.id,d)}</div>
     <div class="stack grow" style="gap:8px"><div class="seg">${[['done','تم ✓','p'],['absent','غاب','a']].map(([k,nm,c])=>`<button class="${x.s===k?'on '+c:''}" data-act="modS" data-e="${e.id}" data-s="${k}">${nm}</button>`).join('')}</div>
+    <div class="small"><span class="muted">جولات المتابعة:</span> <span style="display:inline-flex;gap:4px;flex-wrap:wrap">${mrChips(S.checks?.[e.id]?.[d]?.mr,d)}</span></div>
     ${off?`<div class="field"><label class="label" for="md_cv_${e.id}">مين غطّى مكانه؟</label><select id="md_cv_${e.id}" data-mod="${e.id}">${empOpts(x.cover,e.id)}</select></div>`:''}</div></div>`}).join('')||'<p class="small muted">مفيش موديريتور في الفريق.</p>'}</div></div>
   ${block('shoots',EN.shoots)}
   ${block('edits',EN.edits)}
@@ -1470,6 +1481,8 @@ document.addEventListener('click',async e=>{
       bt.set(db.doc('tasks/'+e.id+'_'+S.taskDate),{emp:e.id,date:S.taskDate,items,msg,byName:me?.name||(S.fin?'الإدارة':'التيم ليدر')});k++;if(e.email)rem.push({email:cleanEmail(e.email),td:{d:S.taskDate,n:items.length,k:items.filter(x=>x.done).length}})});
     if(!k){b.disabled=false;return toast('مفيش تغيير')}
     if(await save(()=>bt.commit(),`اتحفظ لـ ${k} موظف`))pushTasks(rem);b.disabled=false;return}
+  if(a==='modRound'){if(!S.me)return;const r=+b.dataset.r;if(r!==curRound())return toast('الجولة دي خلصت، استنى الجاية');b.disabled=true;
+    if(!await save(()=>db.doc('checkins/'+S.me.id).set({empId:S.me.id,log:{[today()]:{mr:{[r]:firebase.firestore.FieldValue.serverTimestamp()}}}},{merge:true}),'اتسجّلت ✓'))b.disabled=false;return}
   if(a==='sendAsk'){const t=v('ask_t');if(!t)return toast('اكتب اللي واقف معاك الأول');if(!S.me)return;b.disabled=true;
     const list=[...(S.myAsks||[]),{id:uid(),t:t.slice(0,600),at:Date.now(),done:false}].slice(-30);
     if(await save(()=>db.doc('asks/'+S.me.id).set({emp:S.me.id,name:S.me.name||'',list}),'اتبعتت للإدارة والتيم ليدر ✓')){S.myAsks=list;document.getElementById('ask_t').value='';pushAsk(t)}b.disabled=false;return}
@@ -1510,7 +1523,7 @@ document.addEventListener('click',async e=>{
   if(a==='addPs'){S.attDraft.posts.push({e:S.emps.find(x=>has(x,'creator'))?.id||S.emps[0]?.id,a:'',t:'بوست'});render();return}
   if(a==='rmPs'){S.attDraft.posts.splice(+b.dataset.i,1);render();return}
   if(a==='addEn'){const k=b.dataset.k,c=EN[k],L=S.attDraft[k],last=L[L.length-1];L.push({e:last?.e||S.emps.find(x=>c.roles.some(r=>has(x,r)))?.id||S.emps[0]?.id,cv:last?.cv||'',a:'',...(c.t?{t:c.t[0]}:{})});render();return}
-  if(a==='enOk'){const x=S.attDraft[b.dataset.k]?.[+b.dataset.i];if(x){const v=b.dataset.v==='1';x.ok=x.ok===v?undefined:v}render();return}
+  if(a==='enOk'){const x=S.attDraft[b.dataset.k]?.[+b.dataset.i];if(x){const v=b.dataset.v==='1';x.ok=x.ok===v?undefined:v;if(x.ok!==false){delete x.by;delete x.why}}render();return}
   if(a==='addAd'){S.attDraft.ads.push({a:'',link:'',amt:''});render();return}
   if(a==='rmAd'){S.attDraft.ads.splice(+b.dataset.i,1);render();return}
   if(a==='rmEn'){S.attDraft[b.dataset.k].splice(+b.dataset.i,1);render();return}
@@ -1525,7 +1538,7 @@ document.addEventListener('click',async e=>{
     for(const[k,c]of Object.entries(EN))body[k]=(D[k]||[]).filter(x=>x.e&&x.a).map(x=>{if(!x.id)x.id=uid();const o={id:x.id,e:x.e,a:x.a};
       if(c.cover&&x.cv&&x.cv!==x.e)o.cv=x.cv;if(c.t)o.t=x.t||c.t[0];if(k==='posts'||k==='designs')o.n=1;if(c.n)o.n=Math.max(k==='edits'?1:0,+x.n||0);
       if(c.amt)o.amt=+x.amt||0;if(c.link&&x.link)o.link=/^https?:\/\//i.test(x.link)?x.link.trim():'https://'+x.link.trim();if(c.note&&x.note?.trim())o.note=x.note.trim();
-      if(x.ok===true||x.ok===false)o.ok=x.ok;return o});
+      if(x.ok===true||x.ok===false)o.ok=x.ok;if(x.ok===false&&c.cover){if(x.by&&x.by!==x.e)o.by=x.by;if(x.why?.trim())o.why=x.why.trim()}return o});
     const me=S.emps.find(e=>(e.email||'')===S.email),by=me?.name||(S.fin?'الإدارة':'التيم ليدر');
     if(a==='closeDay'){if(d!==today())return toast('«إنهاء اليوم» بيتعمل لنفس اليوم بس');
       const pend=Object.keys(EN).reduce((s2,k)=>s2+body[k].filter(x=>x.ok!==true&&x.ok!==false).length,0);
@@ -1534,7 +1547,7 @@ document.addEventListener('click',async e=>{
     // مهام كل موظف لليوم ده: من المتابعة + المهام التانية + الرسالة
     const bt=db.batch();bt.set(db.doc('attendance/'+d),body);const rem=[];
     for(const e of S.emps){if(isOwnerEmp(e))continue;const old=S.tasks[e.id],oldIt=old?.items||[],was=(id,t)=>oldIt.find(y=>y.id===id||(!y.id&&y.t===t));
-      const items=[];for(const k of Object.keys(EN))for(const x of body[k])if(x.e===e.id){const t=taskLabel(k,x);items.push({id:x.id,k,t,done:!!was(x.id,t)?.done,...(x.note?{note:x.note}:{}),...(x.link?{link:x.link}:{}),...(x.ok!=null?{ok:x.ok}:{})})}
+      const items=[];for(const k of Object.keys(EN))for(const x of body[k])if(x.e===e.id){const t=taskLabel(k,x);items.push({id:x.id,k,t,done:!!was(x.id,t)?.done,...(x.note?{note:x.note}:{}),...(x.link?{link:x.link}:{}),...(x.ok!=null?{ok:x.ok}:{}),...(x.by?{byEmp:emp(x.by)?.name||''}:{}),...(x.why?{why:x.why}:{})})}
       const X=D.extra[e.id]??xtraOf(e.id);X.t.split('\n').map(z=>z.trim()).filter(Boolean).forEach(t=>{const id='x'+hashStr(t);items.push({id,k:'x',t,done:!!was(id,t)?.done})});
       const msg=(X.msg||'').trim();if(!old&&!items.length&&!msg)continue;
       if(old&&JSON.stringify(oldIt)===JSON.stringify(items)&&(old.msg||'')===msg)continue;
