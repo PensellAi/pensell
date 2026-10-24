@@ -254,8 +254,11 @@ const isExt=x=>typeof x==='string'&&x.startsWith('ext:');
 const isOwnerEmp=e=>!!e&&OWNER_EMAILS.map(x=>x.toLowerCase()).includes((e.email||'').toLowerCase());
 const START=()=>S.cfg.start||'12:00',GRACE=()=>S.cfg.grace||'14:00';
 const lateKind=t=>!t?'':t>GRACE()?'hard':t>START()?'soft':'ok';
+// الديزاينر زي الكريتور: ممكن ديزاينر تاني من يوم معيّن
+const dSegs=a=>a?.designers?.length?a.designers:(a?.designer?[{e:a.designer,from:1}]:[]);
+const segAt=(segs,day)=>{const L=[...(segs||[])].sort((x,y)=>(+x.from||1)-(+y.from||1));return (L.filter(x=>(+x.from||1)<=day).pop()||L[0])||null};
 function teamOf(r){const a=S.asg?.[r.clientId],t=r.mgmt?.team||{};
-  return{creator:a?.creator?.length?a.creator:(t.creator?[{e:t.creator,from:1}]:[]),designer:a?a.designer:t.designer,moderator:a?a.moderator:t.moderator}}
+  return{creator:a?.creator?.length?a.creator:(t.creator?[{e:t.creator,from:1}]:[]),designer:a?(dSegs(a).slice(-1)[0]?.e||''):t.designer,moderator:a?a.moderator:t.moderator}}
 function pSel(id,role,val,extra=''){const pref=S.emps.filter(e=>has(e,role)),rest=S.emps.filter(e=>!has(e,role));
   return `<select id="${id}" ${extra}><option value="">—</option>${pref.map(e=>`<option value="${e.id}" ${val===e.id?'selected':''}>${h(e.name)}</option>`).join('')}${rest.length?`<optgroup label="باقي الفريق">${rest.map(e=>`<option value="${e.id}" ${val===e.id?'selected':''}>${h(e.name)} — ${h(rolesTxt(e))}</option>`).join('')}</optgroup>`:''}</select>`}
 function dailyPhoto(){const sh={},ed={};for(const d of Object.values(ATT())){(d.shoots||[]).forEach(x=>{if(x.e&&x.a)(sh[x.a]??=[]).push({e:x.e,reels:+x.n||0,date:d.date})});(d.edits||[]).forEach(x=>{if(x.e&&x.a)(ed[x.a]??=[]).push({e:x.e,v:+x.n||0,date:d.date})})}return{sh,ed}}
@@ -606,7 +609,7 @@ function autoPlan(X,m){const days=monDays(m).filter(d=>!isFri(d)),q=X.q||{},item
   return items}
 // المتابعة اليومية بتتعلّم لوحدها من الخطة (لليوم اللي لسه ماتحفظش)
 function planFill(D,d){const m=d.slice(0,7);let n=0;for(const P of Object.values(S.plans||{})){if(P.month!==m)continue;const its=P.items?.[d]||[];if(!its.length)continue;const A=S.asg?.[P.cid];if(!A)continue;
-  const day=+d.slice(8),segs=[...(A.creator||[])].sort((a,b)=>(+a.from||1)-(+b.from||1)),cr=(segs.filter(x=>(+x.from||1)<=day).pop()||segs[0])?.e,dg=A.designer;
+  const day=+d.slice(8),segs=[...(A.creator||[])].sort((a,b)=>(+a.from||1)-(+b.from||1)),cr=(segs.filter(x=>(+x.from||1)<=day).pop()||segs[0])?.e,dg=segAt(dSegs(A),day)?.e;
   for(const it of its){if(cr&&PS_T.includes(it.t)&&!D.posts.some(x=>x.e===cr&&x.a===P.cid&&x.t===it.t&&x.cv==null)){D.posts.push({e:cr,a:P.cid,t:it.t,...(it.idea?{idea:it.idea}:{})});n++}
     const dt=it.t==='كيرزل'?'كيرزل':['بوست','ريالتي'].includes(it.t)?'ديزاين':null;if(dg&&dt&&!D.designs.some(x=>x.e===dg&&x.a===P.cid&&x.t===dt&&x.cv==null)){D.designs.push({e:dg,a:P.cid,t:dt,...(it.idea?{idea:it.idea}:{})});n++}}}
   if(n)D.fromPlan=true}
@@ -758,32 +761,34 @@ function vCheckin(){
 /* ---------- التوزيع ---------- */
 function distOf(cid){
   if(S.distDraft[cid])return S.distDraft[cid];
-  const a=S.asg[cid];if(a)return{creator:(a.creator||[]).map(x=>({...x})),designer:a.designer||'',moderator:a.moderator||''};
+  const a=S.asg[cid];if(a)return{creator:(a.creator||[]).map(x=>({...x})),designers:dSegs(a).length?dSegs(a).map(x=>({...x})):[{e:'',from:1}],moderator:a.moderator||''};
   const r=S.recs.find(x=>x.clientId===cid),t=r?.mgmt?.team||{};
-  return{creator:[{e:t.creator||'',from:1}],designer:t.designer||'',moderator:t.moderator||''};
+  return{creator:[{e:t.creator||'',from:1}],designers:[{e:t.designer||'',from:1}],moderator:t.moderator||''};
 }
 function readDist(cid){const d=distOf(cid);
   d.creator=d.creator.map((x,i)=>({e:v(`dc_e_${cid}_${i}`),from:i?Math.max(2,n(`dc_f_${cid}_${i}`)||2):1}));
-  d.designer=v('dd_'+cid);d.moderator=v('dm_'+cid);S.distDraft[cid]=d;return d}
+  d.designers=d.designers.map((x,i)=>({e:v(`dd_e_${cid}_${i}`),from:i?Math.max(2,n(`dd_f_${cid}_${i}`)||2):1}));
+  d.moderator=v('dm_'+cid);S.distDraft[cid]=d;return d}
 function vDist(){
   const act=S.clients.filter(c=>c.active!==false);
   if(!act.length)return `<div class="panel empty"><h3>مفيش عملاء لسه</h3><p>${S.fin?'ضيف العملاء من تبويب «الأكونتات» الأول.':'الإدارة لسه ماضافتش عملاء.'}</p></div>`;
   const [yy,mo]=S.month.split('-').map(Number),dim=new Date(yy,mo,0).getDate();
   return `<div class="stack"><div class="row between"><h2>توزيع ${mName(S.month)}</h2>${!Object.keys(S.asg).length?`<button class="btn dark" data-act="copyDist">انقل توزيع الشهر اللي فات</button>`:''}</div>
-  <p class="small muted" style="margin:0">مين شغال على كل أكونت. كل موظف بيشوف أكونتاته في صفحته. لو كريتور مشي في نص الشهر، دوس «كريتور تاني من يوم…» وحدد اليوم اللي بدأ فيه البديل، ومرتب الأكونت بيتقسم عليهم بعدد الأيام.</p>
+  <p class="small muted" style="margin:0">مين شغال على كل أكونت. كل موظف بيشوف أكونتاته في صفحته. لو كريتور أو ديزاينر اتغيّر في نص الشهر، دوس «كريتور تاني من يوم…» أو «ديزاينر تاني من يوم…» وحدد اليوم اللي بدأ فيه البديل. الأكونت بيظهر لكل واحد في أيامه بس، ونصيب الأكونت بيتقسم عليهم على حسب الشغل اللي كل واحد عمله.</p>
   ${act.map(c=>{const d=distOf(c.id),saved=!!S.asg[c.id]&&!S.distDraft[c.id];
    return `<div class="panel stack" style="gap:10px"><div class="row between"><h3>${h(c.name)}</h3><span class="pill ${saved?'paid':S.distDraft[c.id]?'unpaid':'none'}">${saved?'متسجّل':S.distDraft[c.id]?'فيه تعديل مش محفوظ':'لسه ماتوزعش'}</span></div>
     <div class="field"><span class="label">كريتور</span><div class="lst">${d.creator.map((x,i)=>`<div class="r">${pSel(`dc_e_${c.id}_${i}`,'creator',x.e,`data-dist="${c.id}"`)}${i?`<div class="row" style="flex:0 0 auto;gap:4px;flex-wrap:nowrap"><span class="small">من يوم</span><input id="dc_f_${c.id}_${i}" data-dist="${c.id}" type="number" min="2" max="${dim}" value="${x.from||''}" style="width:64px" aria-label="من يوم"></div><button class="x" data-act="rmSeg" data-c="${c.id}" data-i="${i}" aria-label="شيل">−</button>`:''}</div>`).join('')}</div>
      <button class="btn sm ghost" data-act="addSeg" data-c="${c.id}" style="align-self:flex-start;padding-inline:0">+ كريتور تاني من يوم…</button></div>
-    <div class="grid2"><div class="field"><label class="label" for="dd_${c.id}">ديزاينر</label>${pSel('dd_'+c.id,'designer',d.designer,`data-dist="${c.id}"`)}</div>
-     <div class="field"><label class="label" for="dm_${c.id}">موديريتور</label>${pSel('dm_'+c.id,'moderator',d.moderator,`data-dist="${c.id}"`)}</div></div>
+    <div class="field"><span class="label">ديزاينر</span><div class="lst">${d.designers.map((x,i)=>`<div class="r">${pSel(`dd_e_${c.id}_${i}`,'designer',x.e,`data-dist="${c.id}"`)}${i?`<div class="row" style="flex:0 0 auto;gap:4px;flex-wrap:nowrap"><span class="small">من يوم</span><input id="dd_f_${c.id}_${i}" data-dist="${c.id}" type="number" min="2" max="${dim}" value="${x.from||''}" style="width:64px" aria-label="من يوم"></div><button class="x" data-act="rmSegD" data-c="${c.id}" data-i="${i}" aria-label="شيل">−</button>`:''}</div>`).join('')}</div>
+     <button class="btn sm ghost" data-act="addSegD" data-c="${c.id}" style="align-self:flex-start;padding-inline:0">+ ديزاينر تاني من يوم…</button></div>
+    <div class="grid2"><div class="field"><label class="label" for="dm_${c.id}">موديريتور</label>${pSel('dm_'+c.id,'moderator',d.moderator,`data-dist="${c.id}"`)}</div></div>
     <div><button class="btn ${saved?'':'primary'} sm" data-act="saveDist" data-c="${c.id}">حفظ التوزيع</button></div></div>`}).join('')}</div>`;
 }
 async function rebuildMine(){
   const m=S.month,acc={};
   for(const a of Object.values(S.asg)){if(a.month!==m)continue;const c=a.clientName||cli(a.clientId)?.name||'';const segs=a.creator||[],cid=a.clientId;
     segs.forEach((sg,i)=>{if(!sg.e)return;const to=i<segs.length-1?(+segs[i+1].from-1):null;(acc[sg.e]??=[]).push({c,cid,r:'كريتور',from:+sg.from||1,to})});
-    if(a.designer)(acc[a.designer]??=[]).push({c,cid,r:'ديزاينر'});if(a.moderator)(acc[a.moderator]??=[]).push({c,cid,r:'موديريتور'})}
+    const ds=dSegs(a);ds.forEach((sg,i)=>{if(!sg.e)return;const to=i<ds.length-1?(+ds[i+1].from-1):null;(acc[sg.e]??=[]).push({c,cid,r:'ديزاينر',...(ds.length>1?{from:+sg.from||1,to}:{})})});if(a.moderator)(acc[a.moderator]??=[]).push({c,cid,r:'موديريتور'})}
   const bt=db.batch();S.emps.forEach(e=>bt.set(db.doc('mine/'+e.id),{byMonth:{[m]:acc[e.id]||[]}},{merge:true}));await bt.commit();
 }
 /* ---------- المهام ---------- */
@@ -1186,7 +1191,7 @@ const EN={
   edits:{title:'المونتاج',hint:'المونتير، والأكونت، وعدد الفيديوهات. في الملاحظة ممكن تحط لينك الدرايف اللي فيه الداتا.',roles:['editor'],n:'عدد الفيديوهات',note:'ملاحظة أو لينك الدرايف',add:'+ مونتاج'},
   ads:{title:'الإعلانات الممولة',hint:'الميديا باير، والأكونت، ولينك البوست اللي هيتمول، والمبلغ. الإعلان بيتضاف على فاتورة العميل بالتاريخ واللينك والمبلغ لما الميديا باير يعلّم Done أو التيم ليدر يأكّد «تم فعلاً».',roles:['mediabuyer'],link:'لينك البوست اللي هيتمول',amt:1,note:'ملاحظة: التارجت، اللوكيشن…',add:'+ إعلان ممول'}};
 // الأكونتات المتوزعة على موظف في الشهر ده
-function accsFor(eid,role){return Object.values(S.asg||{}).filter(a=>a.month===S.month&&(role==='creator'?(a.creator||[]).some(x=>x.e===eid):a[role]===eid)).map(a=>a.clientId)}
+function accsFor(eid,role,day){return Object.values(S.asg||{}).filter(a=>{if(a.month!==S.month)return false;const segs=role==='creator'?a.creator||[]:role==='designer'?dSegs(a):null;if(!segs)return a[role]===eid;return day?segAt(segs,day)?.e===eid:segs.some(x=>x.e===eid)}).map(a=>a.clientId)}
 const clName=id=>cli(id)?.name||'';
 function taskLabel(k,x){const c=clName(x.a),cv=x.cv?' · مكان '+(emp(x.cv)?.name||''):'';
   return k==='posts'||k==='designs'?`${x.t} · ${c}${cv}${x.idea?' — '+x.idea:''}`:k==='shoots'?`تصوير · ${c}${x.n?' · '+x.n+' فيديو':''}`:k==='edits'?`مونتاج · ${c} · ${x.n||1} فيديو`:`تمويل بوست · ${c} · ${money(x.amt)} ج`}
@@ -1215,6 +1220,7 @@ function vAtt(){
     return `<div class="row between" style="gap:6px"><span class="small ${eDone?'':'muted'}" style="${eDone?'color:var(--good)':''}">${!x.id?'لسه ماتحفظتش':eDone?'الموظف علّم إنها خلصت ✓':'الموظف لسه ماعلّمش'}</span>
       <div class="seg">${[[true,'تم فعلاً ✓','p'],[false,'متمّتش','a']].map(([v,nm,cl])=>`<button class="${x.ok===v?'on '+cl:''}" data-act="enOk" data-k="${k}" data-i="${i}" data-v="${v?1:0}">${nm}</button>`).join('')}</div></div>
      ${x.ok===false&&c.cover?`<div class="r"><select ${at(k,'by',i)} aria-label="السبب من مين"><option value="">السبب منه هو · بتتخصم</option>${S.emps.filter(p=>p.id!==x.e).map(p=>`<option value="${p.id}" ${x.by===p.id?'selected':''}>تأخير من ${h(p.name)} · مش بتتخصم منه</option>`).join('')}</select><input ${at(k,'why',i)} placeholder="السبب (مثلاً: الديزاين اتأخر)" value="${h(x.why||'')}" aria-label="السبب"></div>`:''}`};
+  const dayN=d.slice(0,7)===S.month?+d.slice(8):0;
   const isOwn=e=>isOwnerEmp(e)||e.id===ownerEmpId();
   const pplOf=(k,c)=>{const ids=new Set((D[k]||[]).filter(x=>x.cv==null).map(x=>x.e));return S.emps.filter(e=>c.roles.some(r=>has(e,r))||ids.has(e.id))};
   // مهمة تانية + ملاحظة: في كارت الكريتور/الديزاينر/الموديريتور، والباقي في «باقي التيم»
@@ -1230,7 +1236,7 @@ function vAtt(){
        ${on.map(([x,i])=>`<div class="conf"><span class="small" style="font-weight:600">${h(x.t)}</span>${conf(k,c,x,i)}</div>`).join('')}`;
   // الكريتور والديزاينر: أكونتاته المتوزعة + المطلوب من كل أكونت
   const distCard=(k,c,e)=>{const own=(D[k]||[]).map((x,i)=>[x,i]).filter(([x])=>x.e===e.id&&x.cv==null);
-    const accIds=[...new Set([...accsFor(e.id,c.asg),...own.map(([x])=>x.a)])].filter(a=>cli(a));
+    const accIds=[...new Set([...accsFor(e.id,c.asg,dayN),...own.map(([x])=>x.a)])].filter(a=>cli(a));
     return `<div class="en-row"><b>${h(e.name)}</b>
      ${accIds.length?accIds.map(a=>`<div class="acc-t"><div class="small" style="font-weight:600">${h(clName(a))}</div>${chipsFor(k,c,own.filter(([x])=>x.a===a),(w,t)=>w==='none'?`data-act="enNone" data-k="${k}" data-e="${e.id}" data-a="${a}"`:`data-act="enTog" data-k="${k}" data-e="${e.id}" data-a="${a}" data-t="${t}"`)}</div>`).join('')
       :'<div class="small muted">مفيش أكونتات متوزعة عليه الشهر ده. وزّعها من «التوزيع».</div>'}
@@ -1255,7 +1261,7 @@ function vAtt(){
   const hostOf=C=>C.host||(C.e&&pplOf('posts',EN.posts).some(e=>e.id===C.e)?'posts':C.e&&pplOf('designs',EN.designs).some(e=>e.id===C.e)?'designs':'panel');
   const coverUI=(ci,fixed)=>{const C=D.covers[ci];const ab=C.cv?emp(C.cv):null;let body='';
       if(ab&&C.e){for(const k of ['posts','designs']){const c=EN[k],mine=(D[k]||[]).map((x,i)=>[x,i]).filter(([x])=>x.e===C.e&&x.cv===C.cv);if(!c.roles.some(r=>has(ab,r))&&!mine.length)continue;
-          const accIds=[...new Set([...accsFor(C.cv,c.asg),...mine.map(([x])=>x.a)])].filter(a=>cli(a));
+          const accIds=[...new Set([...accsFor(C.cv,c.asg,dayN),...mine.map(([x])=>x.a)])].filter(a=>cli(a));
           body+=`<div class="small muted">${k==='posts'?'أكونتات الكريتور':'أكونتات الديزاين'}</div>`+(accIds.length?accIds.map(a=>`<div class="acc-t"><div class="small" style="font-weight:600">${h(clName(a))}</div>${chipsFor(k,c,mine.filter(([x])=>x.a===a),(w,t)=>w==='none'?`data-act="cvNone" data-k="${k}" data-c="${ci}" data-a="${a}"`:`data-act="cvTog" data-k="${k}" data-c="${ci}" data-a="${a}" data-t="${t}"`)}</div>`).join(''):'<div class="small muted">مفيش أكونتات متوزعة عليه.</div>')}
         if(has(ab,'moderator')){const m=D.mods[C.cv],on=m?.s==='absent'&&m.cover===C.e;body+=`<div class="chips"><button class="chip ${on?'on':''}" data-act="cvMod" data-c="${ci}">غطّى الموديريشن بتاعه</button></div>`}}
       return `<div class="en-row" style="background:var(--accent-soft)">
@@ -1691,13 +1697,17 @@ document.addEventListener('click',async e=>{
       const nt=v(`sm_${x.e.id}_note`);if(nt)o.note=nt;if(Object.keys(o).length)rows[x.e.id]=o}
     if(await save(()=>db.doc('summary/'+S.month).set({rows}),'الملخص اتحفظ')){S.sumOv=rows;S.sumEdit=false;document.activeElement?.blur();render()}return}
   if(a==='addSeg'){const c=b.dataset.c,d=readDist(c);const day=+today().slice(8)||2;d.creator.push({e:'',from:Math.max(2,S.month===today().slice(0,7)?day:2)});render();return}
+  if(a==='addSegD'){const c=b.dataset.c,d=readDist(c);const day=+today().slice(8)||2;d.designers.push({e:'',from:Math.max(2,S.month===today().slice(0,7)?day:2)});render();return}
+  if(a==='rmSegD'){const c=b.dataset.c,d=readDist(c);d.designers.splice(+b.dataset.i,1);render();return}
   if(a==='rmSeg'){const c=b.dataset.c,d=readDist(c);d.creator.splice(+b.dataset.i,1);render();return}
   if(a==='saveDist'){const c=b.dataset.c,d=readDist(c),cl=cli(c);d.creator=d.creator.filter((x,i)=>x.e||i===0);
     for(let i=1;i<d.creator.length;i++)if(+d.creator[i].from<=+d.creator[i-1].from)return toast('أيام تغيير الكريتور لازم تكون بالترتيب');
-    const doc={month:S.month,clientId:c,clientName:cl?.name||'',creator:d.creator.filter(x=>x.e),designer:d.designer||'',moderator:d.moderator||''};
+    d.designers=d.designers.filter((x,i)=>x.e||i===0);for(let i=1;i<d.designers.length;i++)if(+d.designers[i].from<=+d.designers[i-1].from)return toast('أيام تغيير الديزاينر لازم تكون بالترتيب');
+    const dz=d.designers.filter(x=>x.e);
+    const doc={month:S.month,clientId:c,clientName:cl?.name||'',creator:d.creator.filter(x=>x.e),designers:dz,designer:dz[0]?.e||'',moderator:d.moderator||''};
     if(await save(()=>db.doc('assign/'+S.month+'_'+c).set(doc),'التوزيع اتحفظ')){S.asg[c]=doc;delete S.distDraft[c];document.activeElement?.blur();render();rebuildMine().catch(err)}return}
   if(a==='copyDist'){b.disabled=true;const pm=prevMonth(S.month);const snap=await db.collection('assign').where('month','==',pm).get();let k=0;const bt=db.batch();
-    snap.docs.forEach(x=>{const p=x.data();const last=(p.creator||[]).slice(-1)[0];const doc={month:S.month,clientId:p.clientId,clientName:p.clientName||'',creator:last?[{e:last.e,from:1}]:[],designer:p.designer||'',moderator:p.moderator||''};bt.set(db.doc('assign/'+S.month+'_'+p.clientId),doc);S.asg[p.clientId]=doc;k++});
+    snap.docs.forEach(x=>{const p=x.data();const last=(p.creator||[]).slice(-1)[0];const lastD=dSegs(p).slice(-1)[0]?.e||'';const doc={month:S.month,clientId:p.clientId,clientName:p.clientName||'',creator:last?[{e:last.e,from:1}]:[],designers:lastD?[{e:lastD,from:1}]:[],designer:lastD,moderator:p.moderator||''};bt.set(db.doc('assign/'+S.month+'_'+p.clientId),doc);S.asg[p.clientId]=doc;k++});
     if(!k){b.disabled=false;return toast('مفيش توزيع في الشهر اللي فات')}
     if(await save(()=>bt.commit(),`اتنقل توزيع ${k} أكونت`))rebuildMine().catch(err);else b.disabled=false;return}
   if(a==='saveTasks'){b.disabled=true;const bt=db.batch();let k=0;const rem=[];const me=S.emps.find(e=>(e.email||'')===S.email);
@@ -1820,7 +1830,7 @@ document.addEventListener('click',async e=>{
       body.closedAt=firebase.firestore.FieldValue.serverTimestamp();body.closedDay=today();body.closedBy=by}
     // مهام كل موظف لليوم ده: من المتابعة + المهام التانية + الرسالة
     const bt=db.batch();bt.set(db.doc('attendance/'+d),body);const rem=[];
-    for(const e of S.emps){if(isOwnerEmp(e))continue;const old=S.tasks[e.id],oldIt=old?.items||[],was=(id,t)=>oldIt.find(y=>y.id===id||(!y.id&&y.t===t));
+    for(const e of S.emps){const old=S.tasks[e.id],oldIt=old?.items||[],was=(id,t)=>oldIt.find(y=>y.id===id||(!y.id&&y.t===t));
       const items=[];for(const c of body.covers)if(c.e===e.id)items.push({id:c.id,k:'cv',t:'تغطية مكان '+(emp(c.cv)?.name||''),done:!!was(c.id)?.done,...(c.note?{note:c.note}:{})});
       for(const k of Object.keys(EN))for(const x of body[k])if(x.e===e.id){const t=taskLabel(k,x);items.push({id:x.id,k,t,done:!!was(x.id,t)?.done,...(x.note?{note:x.note}:{}),...(x.link?{link:x.link}:{}),...(x.ok!=null?{ok:x.ok}:{}),...(x.by?{byEmp:emp(x.by)?.name||''}:{}),...(x.why?{why:x.why}:{})})}
       const X=D.extra[e.id]??xtraOf(e.id);X.t.split('\n').map(z=>z.trim()).filter(Boolean).forEach(t=>{const id='x'+hashStr(t);items.push({id,k:'x',t,done:!!was(id,t)?.done})});
