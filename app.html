@@ -336,7 +336,8 @@ function boot(){
   firebase.initializeApp(FIREBASE_CONFIG);auth=firebase.auth();db=firebase.firestore();
   try{db.settings({ignoreUndefinedProperties:true})}catch(_){}
   // بيحفظ البيانات على الموبايل، فالتطبيق بيفتح على طول ويحدّث في الخلفية
-  try{db.enablePersistence({synchronizeTabs:true}).catch(()=>{})}catch(_){}
+  // كاش لكل تابة لوحدها: لو التطبيق مفتوح في تابة تانية في الخلفية، التابة الجديدة مش بتستناها
+  try{db.enablePersistence().catch(()=>{})}catch(_){}
   
   auth.onAuthStateChanged(u=>{if(u)start(u);else if(!S.started)loginScreen()});
 }
@@ -360,7 +361,7 @@ async function start(u){
   if(S.started)return;S.started=true;
   S.email=(u.email||'').toLowerCase();S.uid=u.uid;
   const own=OWNER_EMAILS.map(x=>x.toLowerCase()).includes(S.email);let tl=false;
-  try{const r=await db.doc('cfg/roles').get();S.tlEmails=(r.exists&&r.data().tl)||[];tl=S.tlEmails.includes(S.email)}catch(_){S.tlEmails=[]}
+  try{const r=await Promise.race([db.doc('cfg/roles').get(),new Promise((_,no)=>setTimeout(()=>no('timeout'),5000))]).catch(()=>db.doc('cfg/roles').get({source:'cache'}));S.tlEmails=(r.exists&&r.data().tl)||[];tl=S.tlEmails.includes(S.email)}catch(_){S.tlEmails=[]}
   S.fin=own;S.tl=tl&&!own;
   S.mode=(location.hash==='#checkin'||(!own&&!tl))?'checkin':'app';
   document.getElementById('who').textContent=S.mode==='checkin'?'صفحتي':S.fin?'لوحة الإدارة':'التيم ليدر';
@@ -385,10 +386,8 @@ async function start(u){
   if(S.fin)db.doc('fin/main').collection('invoices').onSnapshot(s=>{S.allRecs=s.docs.map(d=>({id:d.id,...d.data()}));rr()},err);
   if(S.mode==='app')db.collection('briefReq').where('done','==',false).onSnapshot(s=>{S.briefReqs=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>b.at-a.at);rr()},err);
   if(S.mode==='app')db.collection('asks').onSnapshot(s=>{S.asksAll=s.docs.map(d=>({id:d.id,...d.data()}));rr()},err);
-  db.collection('calls/team/peers').onSnapshot(s=>{const was=liveCount();S.callPeers=s.docs.map(d=>({key:d.id,...d.data()}));const al=alivePeers();
-    if(S.peersInit&&!CALL.key&&!was&&al.length){const first=al.slice().sort((a,b)=>(+a.joined||0)-(+b.joined||0))[0];if(first&&first.email!==S.email&&Date.now()-(+first.joined||0)<90000)startRing(first.name||'حد من التيم')}
-    if(!al.length&&S.ringing)stopRing();S.peersInit=1;onPeers()},e=>console.warn(e));
-  db.collection('chats').where('emails','array-contains',S.email).onSnapshot(s=>{S.chats=s.docs.map(d=>({id:d.id,...d.data(SNAP)}));S.chatsLoaded=1;onChatsUpdate();rr()},e=>{console.warn(e);S.chatsLoaded=1;rr()});
+  syncRooms();
+  db.collection('chats').where('emails','array-contains',S.email).onSnapshot(s=>{S.chats=s.docs.map(d=>({id:d.id,...d.data(SNAP)}));S.chatsLoaded=1;syncRooms();onChatsUpdate();rr()},e=>{console.warn(e);S.chatsLoaded=1;rr()});
   db.doc('chatRead/'+S.email).onSnapshot(s=>{S.chatRead=s.exists?s.data().m||{}:{};rr()},err);
   db.doc('stars/latest').onSnapshot(s=>{S.star=s.exists?s.data():null;rr()},err);
   if(S.mode==='app'){
@@ -833,7 +832,7 @@ function vChat(){
 function fitChat(){const sh=document.getElementById('chatShell');if(!sh)return;const vh=(window.visualViewport?.height||innerHeight),top=sh.getBoundingClientRect().top;sh.style.height=Math.max(300,vh-top-12)+'px'}
 addEventListener('resize',fitChat);window.visualViewport?.addEventListener('resize',fitChat);
 function paintFab(un){const f=document.getElementById('chatFab');if(!f)return;f.hidden=!S.started||S.mode==='screen'||S.tab==='chat';
-  const bd=document.getElementById('fabBadge');bd.hidden=!un;bd.textContent=un>9?'9+':un;document.getElementById('fabCall').hidden=!liveCount();paintCallBar()}
+  const bd=document.getElementById('fabBadge');bd.hidden=!un;bd.textContent=un>9?'9+':un;document.getElementById('fabCall').hidden=!Object.keys(S.roomPeers||{}).some(r=>liveCount(r));paintCallBar()}
 function paintChat(first){
   paintCallCtl();if(first)fitChat();
   const L=document.getElementById('chatList');
@@ -918,7 +917,7 @@ function onChatsUpdate(){const seen=S.lastSeenAt||(S.lastSeenAt={}),first=!S.cha
     if(document.hidden)localNotify(title,c.last.text,'chat-'+c.id,'/app.html#chat-'+c.id);else{toast(`💬 ${c.last.from}: ${String(c.last.text).slice(0,60)}`);beep()}}
   if(S.pendingHash){const hsh=S.pendingHash;S.pendingHash=null;openFromHash(hsh)}}
 function openFromHash(hsh){if(!hsh)return;if(hsh==='#me'){if(S.mode==='app'){S.tab='me';render()}return}if(!(S.chats||[]).some(c=>c.id==='team')){S.pendingHash=hsh;return}
-  S.prevTab=S.tab!=='chat'?S.tab:S.prevTab;S.tab='chat';const cid=hsh.startsWith('#chat-')?hsh.slice(6):'team';openChat((S.chats||[]).some(c=>c.id===cid)?cid:'team');try{history.replaceState(null,'',location.pathname)}catch(_){}}
+  S.prevTab=S.tab!=='chat'?S.tab:S.prevTab;S.tab='chat';const cid=hsh.startsWith('#chat-')?hsh.slice(6):hsh.startsWith('#call-')?hsh.slice(6):'team';openChat((S.chats||[]).some(c=>c.id===cid)?cid:'team');try{history.replaceState(null,'',location.pathname)}catch(_){}}
 // صوت الرنّة (بيتعمل بالكود، مش ملف)
 let AC=null;const audioCtx=()=>{try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();if(AC.state==='suspended')AC.resume();return AC}catch(_){return null}};
 addEventListener('pointerdown',()=>audioCtx(),{once:true,capture:true});
@@ -930,29 +929,37 @@ function trill(t0,dur,vol){const a=audioCtx();if(!a)return;const o=a.createOscil
   for(let i=0;i*0.045<dur;i++){const tt=T+i*0.045,hi=i%2;o.frequency.setValueAtTime(hi?1320:1060,tt);o2.frequency.setValueAtTime(hi?660:530,tt)}
   g.gain.setValueAtTime(0,T);g.gain.linearRampToValueAtTime(vol,T+.02);g.gain.setValueAtTime(vol,T+dur-.04);g.gain.linearRampToValueAtTime(0,T+dur);o.connect(g);o2.connect(g);g.connect(a.destination);o.start(T);o2.start(T);o.stop(T+dur+.05);o2.stop(T+dur+.05)}
 function ringOnce(){trill(0,1,.35);trill(1.25,1,.35);try{navigator.vibrate?.([1000,250,1000])}catch(_){}}
-function startRing(name){if(S.ringing)return;S.ringing={name,until:Date.now()+45000};ringOnce();S.ringT=setInterval(()=>{if(!S.ringing||Date.now()>S.ringing.until||CALL.key||!liveCount())return stopRing();ringOnce()},3600);paintRing();
-  if(document.hidden)localNotify('📞 مكالمة جماعية',`${name} بيتصل بالتيم · دوس علشان تنضم`,'call','/app.html#call',true)}
+function startRing(name,room){room=room||'team';if(S.ringing)return;S.ringing={name,room,until:Date.now()+45000};ringOnce();S.ringT=setInterval(()=>{if(!S.ringing||Date.now()>S.ringing.until||CALL.key||!liveCount(S.ringing.room))return stopRing();ringOnce()},3600);paintRing();
+  if(document.hidden)localNotify(room==='team'?'📞 مكالمة جماعية':'📞 مكالمة من '+name,room==='team'?`${name} بيتصل بالتيم · دوس علشان تنضم`:'بيتصل بيك · دوس علشان ترد',room==='team'?'call':'call-'+room,room==='team'?'/app.html#call':'/app.html#call-'+room,true)}
 function stopRing(){clearInterval(S.ringT);S.ringing=null;paintRing()}
 function paintRing(){let el=document.getElementById('ringScreen');if(!S.ringing){el?.remove();return}
   if(!el){el=document.createElement('div');el.id='ringScreen';document.body.appendChild(el)}
   el.innerHTML=`<div style="position:fixed;inset:0;z-index:40;background:rgba(20,16,17,.94);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:24px;text-align:center">
    <div style="width:110px;height:110px;border-radius:50%;background:#1D7A48;display:flex;align-items:center;justify-content:center;font-size:50px;animation:pulse 1.2s infinite">📞</div>
-   <div><div style="font-family:var(--display);font-size:24px;font-weight:700">مكالمة جماعية</div><div style="opacity:.8;margin-top:4px">${h(S.ringing.name)} بيتصل بالتيم</div></div>
+   <div><div style="font-family:var(--display);font-size:24px;font-weight:700">${S.ringing.room==='team'?'مكالمة جماعية':h(S.ringing.name)}</div><div style="opacity:.8;margin-top:4px">${S.ringing.room==='team'?h(S.ringing.name)+' بيتصل بالتيم':'بيتصل بيك'}</div></div>
    <div class="row" style="gap:28px;margin-top:10px"><button data-act="ringNo" style="width:68px;height:68px;border-radius:50%;border:0;background:#C0262C;color:#fff;font-size:26px;cursor:pointer" aria-label="تجاهل">✕</button>
    <button data-act="ringYes" style="width:68px;height:68px;border-radius:50%;border:0;background:#1FA855;color:#fff;font-size:26px;cursor:pointer" aria-label="انضم">📞</button></div>
-   <div class="small" style="opacity:.6">تجاهل · انضم</div></div><style>@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(31,168,85,.6)}70%{box-shadow:0 0 0 26px rgba(31,168,85,0)}100%{box-shadow:0 0 0 0 rgba(31,168,85,0)}}</style>`}
-/* ---------- المكالمة الجماعية ---------- */
-const CALL={key:null,stream:null,pcs:{},unsub:null,hb:null,muted:false,joined:0,seen:new Set()};
-const alivePeers=()=>(S.callPeers||[]).filter(p=>Date.now()-(+p.alive||0)<70000);
-const liveCount=()=>alivePeers().length;
+   <div class="small" style="opacity:.6">تجاهل · ${S.ringing.room==='team'?'انضم':'رد'}</div></div><style>@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(31,168,85,.6)}70%{box-shadow:0 0 0 26px rgba(31,168,85,0)}100%{box-shadow:0 0 0 0 rgba(31,168,85,0)}}</style>`}
+/* ---------- المكالمات: الجماعية للتيم كله، والخاصة بين اتنين بس ---------- */
+const CALL={key:null,room:null,stream:null,pcs:{},unsub:null,hb:null,muted:false,joined:0,seen:new Set()};
+const curRoom=()=>S.tab==='chat'&&S.chatId&&!S.chatList?S.chatId:'team';
+const alivePeers=room=>(S.roomPeers?.[room??CALL.room??curRoom()]||[]).filter(p=>Date.now()-(+p.alive||0)<70000);
+const liveCount=room=>alivePeers(room).length;
+const roomTitle=room=>room==='team'?'التيم':chatTitle((S.chats||[]).find(c=>c.id===room)||{id:room,emails:[]});
+function syncRooms(){S.roomSubs??={};S.roomPeers??={};const want=new Set(['team',...(S.chats||[]).filter(c=>c.id!=='team'&&(c.emails||[]).includes(S.email)).map(c=>c.id)]);
+  for(const r of Object.keys(S.roomSubs))if(!want.has(r)){S.roomSubs[r]();delete S.roomSubs[r];delete S.roomPeers[r]}
+  for(const room of want){if(S.roomSubs[room])continue;let init=false;
+    S.roomSubs[room]=db.collection('calls/'+room+'/peers').onSnapshot(s=>{const was=liveCount(room);S.roomPeers[room]=s.docs.map(d=>({key:d.id,...d.data()}));const al=alivePeers(room);
+      if(init&&!CALL.key&&!was&&al.length){const first=al.slice().sort((a,b)=>(+a.joined||0)-(+b.joined||0))[0];if(first&&first.email!==S.email&&Date.now()-(+first.joined||0)<90000)startRing(first.name||'حد من التيم',room)}
+      if(!al.length&&S.ringing?.room===room)stopRing();init=true;onPeers()},e=>console.warn(e))}}
 const ICE=()=>{const t=S.cfg?.turn||{},L=[{urls:['stun:stun.l.google.com:19302','stun:stun1.l.google.com:19302']}];if(t.urls)L.push({urls:t.urls.split(/[\s,]+/).filter(Boolean),username:t.user||'',credential:t.pass||''});return{iceServers:L}};
-function paintCallCtl(){const el=document.getElementById('callCtl');if(!el)return;const n=liveCount();
-  el.innerHTML=CALL.key?`<button class="ico ${CALL.muted?'':'live'}" data-act="callMute">${CALL.muted?'🔇':'🎙️'}</button><button class="ico red" data-act="callLeave">إنهاء</button>`
-    :n?`<button class="ico live" data-act="callJoin">📞 انضم · ${n}</button>`:`<button class="ico" data-act="callJoin" aria-label="مكالمة جماعية">📞</button>`}
-function paintCallBar(){const bar=document.getElementById('callBar');if(!bar)return;const n=liveCount(),show=S.started&&S.tab!=='chat'&&(CALL.key||n);
+function paintCallCtl(){const el=document.getElementById('callCtl');if(!el)return;const room=curRoom(),n=liveCount(room);
+  el.innerHTML=CALL.key&&CALL.room===room?`<button class="ico ${CALL.muted?'':'live'}" data-act="callMute">${CALL.muted?'🔇':'🎙️'}</button><button class="ico red" data-act="callLeave">إنهاء</button>`
+    :n?`<button class="ico live" data-act="callJoin" data-room="${room}">📞 ${room==='team'?'انضم · '+n:'رد'}</button>`:`<button class="ico" data-act="callJoin" data-room="${room}" aria-label="${room==='team'?'مكالمة جماعية':'مكالمة'}">📞</button>`}
+function paintCallBar(){const bar=document.getElementById('callBar');if(!bar)return;const room=CALL.room||['team',...Object.keys(S.roomPeers||{})].find(r=>liveCount(r))||'team',n=liveCount(room),show=S.started&&S.tab!=='chat'&&(CALL.key||n);
   bar.hidden=!show;document.body.classList.toggle('has-callbar',!!show);if(!show)return;
-  const names=alivePeers().map(p=>p.name).filter(Boolean);
-  bar.innerHTML=`<div class="callbar"><span style="font-size:18px">${CALL.key?'🔊':'📞'}</span><div style="flex:1;min-width:0"><b>${CALL.key?'انت في المكالمة':'مكالمة جماعية شغالة'}</b><div class="small" style="opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h(names.join('، '))}</div></div>${CALL.key?`<button class="btn sm" data-act="callMute">${CALL.muted?'🔇 مكتوم':'🎙️ كتم'}</button><button class="btn sm leave" data-act="callLeave">إنهاء</button>`:'<button class="btn sm" data-act="callJoin">انضم</button>'}</div>`}
+  const names=alivePeers(room).map(p=>p.name).filter(Boolean);
+  bar.innerHTML=`<div class="callbar"><span style="font-size:18px">${CALL.key?'🔊':'📞'}</span><div style="flex:1;min-width:0"><b>${CALL.key?(room==='team'?'انت في المكالمة الجماعية':'انت في مكالمة مع '+h(roomTitle(room))):(room==='team'?'مكالمة جماعية شغالة':'مكالمة من '+h(roomTitle(room)))}</b><div class="small" style="opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h(names.join('، '))}</div></div>${CALL.key?`<button class="btn sm" data-act="callMute">${CALL.muted?'🔇 مكتوم':'🎙️ كتم'}</button><button class="btn sm leave" data-act="callLeave">إنهاء</button>`:`<button class="btn sm" data-act="callJoin" data-room="${room}">${room==='team'?'انضم':'رد'}</button>`}</div>`}
 function onPeers(){
   if(CALL.key){const alive=new Set(alivePeers().map(p=>p.key));
     for(const k of Object.keys(CALL.pcs))if(!alive.has(k))dropPeer(k);
@@ -961,7 +968,7 @@ function onPeers(){
   rr()}
 function dropPeer(k){try{CALL.pcs[k]?.close()}catch(_){}delete CALL.pcs[k];document.getElementById('au_'+k)?.remove()}
 function iceDone(pc){return new Promise(res=>{if(pc.iceGatheringState==='complete')return res();const t=setTimeout(res,3000);pc.addEventListener('icegatheringstatechange',()=>{if(pc.iceGatheringState==='complete'){clearTimeout(t);res()}})})}
-const sendSig=(to,type,sdp)=>db.collection('calls/team/sig').doc().set({from:CALL.key,to,type,sdp,at:Date.now()});
+const sendSig=(to,type,sdp)=>db.collection('calls/'+CALL.room+'/sig').doc().set({from:CALL.key,to,type,sdp,at:Date.now()});
 async function connectTo(k,initiator){
   const pc=new RTCPeerConnection(ICE());CALL.pcs[k]=pc;CALL.stream.getTracks().forEach(t=>pc.addTrack(t,CALL.stream));
   pc.ontrack=e=>{let a=document.getElementById('au_'+k);if(!a){a=document.createElement('audio');a.id='au_'+k;a.autoplay=true;a.setAttribute('playsinline','');document.getElementById('callAudio').appendChild(a)}a.srcObject=e.streams[0];a.play?.().catch(()=>{})};
@@ -971,20 +978,21 @@ async function connectTo(k,initiator){
 async function onSignal(x){
   try{if(x.type==='offer'){if(CALL.pcs[x.from])dropPeer(x.from);const pc=await connectTo(x.from,false);await pc.setRemoteDescription({type:'offer',sdp:x.sdp});const a=await pc.createAnswer();await pc.setLocalDescription(a);await iceDone(pc);await sendSig(x.from,'answer',pc.localDescription.sdp)}
     else if(x.type==='answer'){const pc=CALL.pcs[x.from];if(pc&&pc.signalingState==='have-local-offer')await pc.setRemoteDescription({type:'answer',sdp:x.sdp})}}catch(e){console.warn(e)}}
-async function joinCall(){
-  if(CALL.key)return;if(!navigator.mediaDevices?.getUserMedia||!window.RTCPeerConnection)return toast('المتصفح ده مش بيدعم المكالمات. افتح التطبيق من Chrome أو Safari.');
+async function joinCall(room){
+  room=room||curRoom();if(CALL.key){if(CALL.room===room)return;leaveCall()}
+  if(room.startsWith('new:')||(S.chatNew&&room===S.chatId&&!(S.chats||[]).some(c=>c.id===room))){const cid=S.chatId,other=S.chatNew?.email;if(!other)return;if(!await save(()=>db.doc('chats/'+cid).set({emails:[S.email,other].sort(),names:{[S.email]:myChatName(),[other]:S.chatNew.name}})))return;room=cid}if(!navigator.mediaDevices?.getUserMedia||!window.RTCPeerConnection)return toast('المتصفح ده مش بيدعم المكالمات. افتح التطبيق من Chrome أو Safari.');
   try{CALL.stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false})}catch(e){return toast('لازم تسمح للتطبيق يستخدم المايك علشان تدخل المكالمة')}
-  const first=!liveCount();CALL.key=(myChatId()+'_'+uid()).replace(/[^\w-]/g,'');CALL.joined=Date.now();CALL.muted=false;CALL.seen=new Set();
-  await save(()=>db.doc('calls/team/peers/'+CALL.key).set({name:myChatName(),email:S.email,joined:CALL.joined,alive:Date.now()}));
-  CALL.hb=setInterval(()=>db.doc('calls/team/peers/'+CALL.key).update({alive:Date.now()}).catch(()=>{}),20000);
-  CALL.unsub=db.collection('calls/team/sig').where('to','==',CALL.key).onSnapshot(s=>{s.docs.forEach(d=>{if(CALL.seen.has(d.id))return;CALL.seen.add(d.id);const x=d.data();db.doc('calls/team/sig/'+d.id).delete().catch(()=>{});if(Date.now()-(+x.at||0)<120000)onSignal(x)})},err);
-  if(first)pushNotify('team','call');
-  if(first&&(S.chats||[]).some(c=>c.id==='team')){const FV=firebase.firestore.FieldValue,text='📞 بدأ مكالمة جماعية. دوس «انضم» فوق في الشات.';
-    db.collection('chats/team/msgs').doc().set({text,img:'',from:myChatId(),fromName:myChatName(),fromEmail:S.email,at:FV.serverTimestamp()}).then(()=>db.doc('chats/team').update({last:{text,from:myChatName(),fromEmail:S.email,at:FV.serverTimestamp()}})).catch(err)}
+  const first=!liveCount(room);CALL.room=room;CALL.key=(myChatId()+'_'+uid()).replace(/[^\w-]/g,'');CALL.joined=Date.now();CALL.muted=false;CALL.seen=new Set();
+  await save(()=>db.doc('calls/'+room+'/peers/'+CALL.key).set({name:myChatName(),email:S.email,joined:CALL.joined,alive:Date.now()}));
+  CALL.hb=setInterval(()=>db.doc('calls/'+room+'/peers/'+CALL.key).update({alive:Date.now()}).catch(()=>{}),20000);
+  CALL.unsub=db.collection('calls/'+room+'/sig').where('to','==',CALL.key).onSnapshot(s=>{s.docs.forEach(d=>{if(CALL.seen.has(d.id))return;CALL.seen.add(d.id);const x=d.data();db.doc('calls/'+room+'/sig/'+d.id).delete().catch(()=>{});if(Date.now()-(+x.at||0)<120000)onSignal(x)})},err);
+  if(first)pushNotify(room,'call');
+  if(first&&(S.chats||[]).some(c=>c.id===room)){const FV=firebase.firestore.FieldValue,text=room==='team'?'📞 بدأ مكالمة جماعية. دوس «انضم» فوق في الشات.':'📞 بيتصل بيك. دوس «رد» فوق في الشات.';
+    db.collection('chats/'+room+'/msgs').doc().set({text,img:'',from:myChatId(),fromName:myChatName(),fromEmail:S.email,at:FV.serverTimestamp()}).then(()=>db.doc('chats/'+room).update({last:{text,from:myChatName(),fromEmail:S.email,at:FV.serverTimestamp()}})).catch(err)}
   toast('دخلت المكالمة');onPeers()}
 function leaveCall(){if(!CALL.key)return;const k=CALL.key;clearInterval(CALL.hb);CALL.unsub&&CALL.unsub();Object.keys(CALL.pcs).forEach(dropPeer);
-  CALL.stream?.getTracks().forEach(t=>t.stop());CALL.key=null;CALL.stream=null;CALL.unsub=null;db.doc('calls/team/peers/'+k).delete().catch(()=>{});render()}
-addEventListener('pagehide',()=>{if(CALL.key)db.doc('calls/team/peers/'+CALL.key).delete().catch(()=>{})});
+  const room=CALL.room;CALL.stream?.getTracks().forEach(t=>t.stop());CALL.key=null;CALL.room=null;CALL.stream=null;CALL.unsub=null;db.doc('calls/'+room+'/peers/'+k).delete().catch(()=>{});render()}
+addEventListener('pagehide',()=>{if(CALL.key)db.doc('calls/'+CALL.room+'/peers/'+CALL.key).delete().catch(()=>{})});
 /* ---------- فريلانس ---------- */
 function vFree(){const L=S.free||[],cost=L.reduce((a,f)=>a+(+f.cost||0),0),price=L.reduce((a,f)=>a+(f.clientId?+f.price||0:0),0);
   return `<div class="stack"><div class="row between"><h2>فريلانس ${mName(S.month)}</h2><button class="btn primary" data-act="editFree">+ شغلانة جديدة</button></div>
@@ -1656,7 +1664,7 @@ document.addEventListener('click',async e=>{
   if(a==='fabChat'){S.prevTab=S.tab;S.tab='chat';window.scrollTo(0,0);if(S.chatsLoaded&&(S.chats||[]).some(c=>c.id==='team'))openChat('team');else{S.chatId=null;render()}return}
   if(a==='chatClose'){if(S.unsubMsgs){S.unsubMsgs();S.unsubMsgs=null}S.chatId=null;S.chatList=false;S.tab=S.prevTab&&S.prevTab!=='chat'?S.prevTab:(S.mode==='checkin'?'me':S.fin?'home':'att');render();return}
   if(a==='chatPeople'){if(S.unsubMsgs){S.unsubMsgs();S.unsubMsgs=null}S.chatList=true;render();return}
-  if(a==='callJoin')return joinCall();
+  if(a==='callJoin')return joinCall(b.dataset.room);
   if(a==='callLeave')return leaveCall();
   if(a==='callMute'){CALL.muted=!CALL.muted;CALL.stream?.getAudioTracks().forEach(t=>t.enabled=!CALL.muted);render();return}
   if(a==='chatOpen')return openChat(b.dataset.cid);
@@ -1764,7 +1772,7 @@ document.addEventListener('click',async e=>{
     if(await save(()=>bt.commit(),`${e.name} نجم ${mName(S.month)} ⭐`)){S.monthStar=doc;render()}return}
   if(a==='notifOn')return enableNotifs();
   if(a==='notifHide'){S.notifHide=1;render();return}
-  if(a==='ringYes'){stopRing();S.prevTab=S.tab!=='chat'?S.tab:S.prevTab;S.tab='chat';openChat('team');joinCall();return}
+  if(a==='ringYes'){const room=S.ringing?.room||'team';stopRing();S.prevTab=S.tab!=='chat'?S.tab:S.prevTab;S.tab='chat';openChat(room);joinCall(room);return}
   if(a==='ringNo'){stopRing();return}
   if(a==='savePush'){let u=v('s_push');if(u&&!/^https:\/\//.test(u))u='https://'+u;if(await save(()=>db.doc('cfg/settings').set({pushUrl:u},{merge:true}),'اتحفظ')){S.cfg={...S.cfg,pushUrl:u};S.pushDone=0;subscribePush(true);render()}return}
   if(a==='testPush'){try{const r=await fetch(pushUrl());const j=await r.json();toast(j.ok?'السيرفر شغال ✓':'السيرفر مش بيرد صح')}catch(_){toast('السيرفر مش بيرد. اتأكد من الرابط')}return}
