@@ -382,7 +382,7 @@ async function start(u){
   mainEl().innerHTML='<div class="empty"><h3>بيحمّل…</h3></div>';
   db.doc('cfg/settings').onSnapshot(s=>{if(s.exists)S.cfg={...S.cfg,...s.data()};subscribePush();rr()},err);
   if(/^#(chat-|call)/.test(location.hash))S.pendingHash=location.hash;
-  if(location.hash==='#me'&&S.mode==='app')S.tab='me';
+  if(location.hash==='#me'&&S.mode==='app')S.tab='me';if(location.hash==='#site'&&own)S.tab='site';
   const empQ=S.mode==='app'?db.collection('employees'):db.collection('employees').where('email','==',S.email);
   empQ.onSnapshot(s=>{S.emps=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ar'));S.empsLoaded=1;
     const me=S.emps.find(e=>(e.email||'').toLowerCase()===S.email);
@@ -396,6 +396,8 @@ async function start(u){
       unsubMine.push(db.doc('asks/'+me.id).onSnapshot(x=>{S.myAsks=x.exists?x.data().list||[]:[];rr()},err))}}
     S.me=me||null;if(S.fin){S.emps.forEach(e=>{if(e.email&&e.email!==cleanEmail(e.email))db.doc('employees/'+e.id).update({email:cleanEmail(e.email)}).catch(err)});syncTeamChat()}rr()},err);
   if(S.fin)db.doc('fin/main').collection('invoices').onSnapshot(s=>{S.allRecs=s.docs.map(d=>({id:d.id,...d.data()}));rr()},err);
+  if(S.fin||S.tl)db.collection('offers').onSnapshot(s=>{S.offers=s.docs.map(d=>({id:d.id,...d.data(SNAP)})).sort((a,b)=>(b.at?.toMillis?.()||0)-(a.at?.toMillis?.()||0));ensureMeetTasks();rr()},err);
+  if(S.fin)db.collection('siteChats').onSnapshot(s=>{S.siteChats=s.docs.map(d=>({id:d.id,...d.data(SNAP)})).sort((a,b)=>(b.at?.toMillis?.()||0)-(a.at?.toMillis?.()||0));rr()},err);
   if(S.fin)db.collection('workSubs').where('status','==','pending').onSnapshot(s=>{S.wsSubs=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>b.at-a.at);rr()},err);
   if(S.mode==='app')db.collection('briefReq').where('done','==',false).onSnapshot(s=>{S.briefReqs=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>b.at-a.at);rr()},err);
   if(S.mode==='app')db.collection('asks').onSnapshot(s=>{S.asksAll=s.docs.map(d=>({id:d.id,...d.data()}));rr()},err);
@@ -573,7 +575,7 @@ function render(){
   if(S.tab==='site')ensureSite();
   if(!S.started||S.mode==='screen')return;
   document.getElementById('mLabel').textContent=mName(S.month);
-  const askN=openAsks().length,meT=askN?`صفحتي (${askN})`:'صفحتي';const brN=(S.briefReqs||[]).filter(x=>!x.done).length;const wsN=(S.wsSubs||[]).length;const tabs=(S.mode==='checkin'?[]:S.fin?[...TABS_FIN,['me',meT]]:[...TABS_TL,['me',meT]]).map(([k,n])=>k==='brief'&&brN?[k,`${n} (${brN})`]:k==='site'&&wsN?[k,`${n} (${wsN})`]:[k,n]);const un=chatUnread();
+  const askN=openAsks().length,meT=askN?`صفحتي (${askN})`:'صفحتي';const brN=(S.briefReqs||[]).filter(x=>!x.done).length;const wsN=(S.wsSubs||[]).length;const tabs=(S.mode==='checkin'?[]:S.fin?[...TABS_FIN,['me',meT]]:[...TABS_TL,['me',meT]]).map(([k,n])=>k==='brief'&&brN?[k,`${n} (${brN})`]:k==='site'&&(wsN+ofSiteN())?[k,`${n} (${wsN+ofSiteN()})`]:[k,n]);const un=chatUnread();
   document.getElementById('tabs').hidden=!tabs.length||S.tab==='chat';
   if(S.tab!=='chat'&&tabs.length&&!tabs.some(t=>t[0]===S.tab))S.tab=tabs[0][0];
   paintFab(un);
@@ -759,6 +761,64 @@ function wsBox(){const mine=(S.myWs||[]).slice(0,4),W=S.wsDraft||{};
    <div><button class="btn primary" data-act="wsSend">ارسال</button></div>
    ${mine.length?`<div class="small stack" style="gap:4px">${mine.map(x=>`<div class="row between" style="gap:8px;flex-wrap:nowrap"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h(x.title)}</span><span style="flex:none;color:${x.status==='approved'?'var(--good)':x.status==='rejected'?'var(--bad)':'var(--muted)'}">${x.status==='approved'?'اتنشرت على الموقع ✓':x.status==='rejected'?'مااتنشرتش':'مستنية المراجعة'}</span></div>`).join('')}</div>`:''}</div>`}
 const readWs=()=>{S.wsDraft={...(S.wsDraft||{}),cat:v('ws_cat'),title:v('ws_t'),desc:v('ws_d'),link:v('ws_l')}};
+/* ---------- عروض «فصّل باقتك» وشات الموقع ---------- */
+const OF_SV=[['page','إنشاء صفحة'],['plan','خطة تسويقية'],['design','تصاميم جرافيك احترافية'],['aidesign','تصميمات بالـ AI'],['aiphoto','تحسين صور بالـ AI'],['ads','إعلانات ممولة'],['photo','تصوير فوتوغرافي'],['reels','باقة ريلز'],['ugc','فيديو UGC'],['aivideo','فيديو AI'],['motion','فيديو موشن جرافيك'],['mod','موديريشن'],['other','حاجة تانية']];
+const OF_PL={fb:'فيسبوك',ig:'انستجرام',tt:'تيك توك',yt:'يوتيوب',sc:'سناب شات',li:'لينكدإن',x:'إكس',th:'ثريدز'};
+const andJ=a=>a.length<2?a.join(''):a.slice(0,-1).join('، ')+' و'+a[a.length-1];
+function offerLines(o){const L=[],s=o.svc||{};
+  for(const[k,nm]of OF_SV){const v=s[k];if(v==null||v===false||v==='')continue;
+    if(k==='photo')L.push(`تصوير فوتوغرافي: ${['','جلسة واحدة','جلستين','3 جلسات','4 جلسات'][+v]||v} في الشهر`);
+    else if(['reels','ugc','aivideo','motion'].includes(k))L.push(k==='reels'?`باقة ريلز: ${v} فيديو في الشهر`:`${v} ${nm} في الشهر`);
+    else if(k==='mod')L.push(`موديريشن ${v}`);else if(k==='other')L.push(`حاجة تانية: ${v}`);else L.push(nm)}
+  const pl=(o.plat||[]).map(k=>OF_PL[k]).filter(Boolean);if(pl.length)L.push('المنصات: '+andJ(pl));
+  if(o.posts)L.push(o.posts);if(+o.ads)L.push(`بادجت الإعلانات: ${money(o.ads)} ج في الشهر`);return L}
+const OFD=['الأحد','الاتنين','التلات','الأربع','الخميس','الجمعة','السبت'];
+const ofHr=hh=>{const x=hh>12?hh-12:hh;return `${x}${hh<15?' الضهر':hh<18?' العصر':' بالليل'}`};
+const ofSlot=k=>{if(!k)return '';const[d,hh]=k.split('_'),o=new Date(d+'T12:00:00Z');return `${OFD[o.getUTCDay()]} ${o.getUTCDate()} ${MONTHS[o.getUTCMonth()]}، الساعة ${ofHr(+hh)}`};
+const ofExp=o=>+o.expMs||o.expiresAt?.toMillis?.()||0;
+const ofState=o=>o.status==='sent'&&ofExp(o)&&Date.now()>ofExp(o)?'expired':o.status||'new';
+const OF_ST={new:['جديد','red'],sent:['اتبعت','unpaid'],expired:['العرض انتهى','none'],accepted:['وافق · حجز ميتنج','paid'],won:['اتفقنا ✓','paid'],lost:['اترفض','none']};
+const ofLink=id=>SITE_URL()+'?o='+id;
+const ofSiteN=()=>(S.offers||[]).filter(o=>o.status==='new'||(o.status==='accepted'&&!o.seenAcc)).length+(S.siteChats||[]).filter(c=>c.unread).length;
+function offersInbox(){const L=S.offers||[],open=L.filter(o=>!['won','lost'].includes(o.status)),closed=L.length-open.length;
+  return `<div class="panel" id="offersBox"><div class="row between"><h3>عروض «فصّل باقتك»</h3>${open.length?`<span class="pill red">${open.length}</span>`:''}</div>
+   <p class="small muted" style="margin:4px 0 8px">العميل بيختار الخدمات والسعر اللي يناسبه من الموقع. افتح العرض، عدّل السعر لو حابب، وابعته واتساب. العميل بيوافق ويحجز ميعاد الميتنج من اللينك خلال 3 أيام.</p>
+   ${L.length?`<div class="list">${(S.ofAll?L:open).map(o=>{const st=OF_ST[ofState(o)]||OF_ST.new;return `<div class="item"><div class="grow" style="min-width:0"><b>${h(o.biz)}</b> <span class="pill ${st[1]}">${st[0]}</span><div class="small muted">${h(o.name)} · <span class="num">${money(+o.final||+o.price)}</span> ج${o.slot&&['accepted','won'].includes(o.status)?' · ميتنج '+h(ofSlot(o.slot)):''}</div></div><button class="btn sm ${o.status==='new'||(o.status==='accepted'&&!o.seenAcc)?'primary':''}" data-act="ofOpen" data-id="${o.id}">افتح</button></div>`}).join('')||'<p class="small muted" style="margin:0">مفيش عروض مفتوحة.</p>'}</div>
+   ${closed?`<button class="btn xs ghost" data-act="ofAll" style="margin-top:6px">${S.ofAll?'اخفي المقفولة':`اعرض المقفولة (${closed})`}</button>`:''}`:'<p class="small muted" style="margin:0">لسه مفيش عروض. أول ما عميل يبعت عرض من الموقع هيظهر هنا ويوصلك إشعار.</p>'}</div>`}
+function siteChatsInbox(){const L=S.siteChats||[];
+  return `<div class="panel"><div class="row between"><h3>شات الموقع</h3>${L.filter(c=>c.unread).length?`<span class="pill red">${L.filter(c=>c.unread).length} جديد</span>`:''}</div>
+   ${L.length?`<div class="list" style="margin-top:6px">${L.slice(0,S.scAll?200:8).map(c=>`<div class="item"><div class="grow" style="min-width:0"><b>${h(c.name||'زائر')}</b>${c.unread?' <span class="pill red">جديد</span>':''}<div class="small muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.lastFrom==='a'?'انت: ':''}${h(c.last||'')}</div></div><button class="btn sm ${c.unread?'primary':''}" data-act="scOpen" data-id="${c.id}">افتح</button></div>`).join('')}</div>${L.length>8?`<button class="btn xs ghost" data-act="scAll" style="margin-top:6px">${S.scAll?'أقل':'كل المحادثات ('+L.length+')'}</button>`:''}`
+   :'<p class="small muted" style="margin:6px 0 0">أي حد يكتب في الشات على الموقع هيظهر هنا ويوصلك إشعار.</p>'}</div>`}
+function ofMsg(o,price,note){return `أهلاً ${o.name||''} 👋\nده عرض Pensell لـ ${o.biz}:\n\n${offerLines(o).map(x=>'• '+x).join('\n')}\n\nسعر الباقة: ${money(price)} ج.م في الشهر${note?'\n'+note:''}\n\nلو موافق دوس على اللينك واختار ميعاد الميتنج 👇\n${ofLink(o.id)}\n\nالعرض ساري لمدة 3 أيام.`}
+function sheetOffer(id){const o=(S.offers||[]).find(x=>x.id===id);if(!o)return;S.edit={kind:'offer',id};const st=ofState(o),L=offerLines(o),ph=waPhone(o.phone),chat=(S.siteChats||[]).find(c=>String(c.phone||'').replace(/\D/g,'').slice(-10)===String(o.phone||'').replace(/\D/g,'').slice(-10));
+  if(o.status==='accepted'&&!o.seenAcc)db.doc('offers/'+id).update({seenAcc:true}).catch(err);
+  openSheet(`<div class="sheet-h"><div><h3>${h(o.biz)}</h3><div class="small muted">${h(o.name)} · <span dir="ltr">${h(o.phone)}</span></div></div><button class="x" data-act="close" aria-label="قفل">×</button></div><div class="stack">
+   <div class="row"><span class="pill ${OF_ST[st][1]}">${OF_ST[st][0]}</span>${st==='sent'?`<span class="small muted">بينتهي ${new Date(ofExp(o)).toLocaleString('ar-EG',{weekday:'long',hour:'numeric',minute:'2-digit'})}</span>`:''}</div>
+   ${['accepted','won'].includes(o.status)&&o.slot?`<div class="panel" style="border-color:var(--good)"><div class="label">ميعاد الميتنج أونلاين</div><b style="font-size:18px">${h(ofSlot(o.slot))}</b>
+     <div class="field" style="margin-top:8px"><label class="label" for="of_meet">لينك الميتنج</label><input id="of_meet" dir="ltr" value="${h(o.meet||'')}" placeholder="https://meet.google.com/..."></div>
+     <div class="row" style="margin-top:6px"><button class="btn sm good" data-act="ofMeet">ابعت لينك الميتنج واتساب</button></div></div>`:''}
+   <div class="sec"><h4>اللي العميل اختاره</h4><div class="small" style="line-height:2">${o.link?`<div>اللينك: <a href="${h(/^https?:/.test(o.link)?o.link:'https://'+o.link)}" target="_blank" rel="noopener" dir="ltr">${h(o.link)}</a></div>`:''}${o.loc?`<div>المقر: ${h(o.loc)}</div>`:''}${L.map(x=>`<div>• ${h(x)}</div>`).join('')}</div>
+    <div class="row between" style="margin-top:8px"><span class="label">السعر اللي العميل عارضه</span><b class="num">${money(o.price)} ج</b></div></div>
+   ${['won','lost'].includes(o.status)?'':`<div class="grid2"><div class="field"><label class="label" for="of_price">السعر بعد التفاوض</label><input id="of_price" type="number" min="0" value="${+o.final||+o.price}"></div></div>
+   <div class="field"><label class="label" for="of_note">ملاحظة للعميل (اختياري)</label><textarea id="of_note" rows="2" placeholder="مثلاً: السعر ده شامل أول شهر إعلانات">${h(o.note||'')}</textarea></div>
+   ${o.status==='accepted'?'':`<button class="btn primary" data-act="ofSend" style="justify-content:center">${o.status==='new'?'ابعت العرض واتساب':'ابعت العرض تاني (3 أيام جديدة)'}</button>`}`}
+   <div class="row" style="flex-wrap:wrap"><a class="btn sm" href="https://wa.me/${ph}" target="_blank" rel="noopener">كلّم العميل واتساب</a>${chat?`<button class="btn sm" data-act="scOpen" data-id="${chat.id}">الشات بتاعه</button>`:''}${o.status==='new'?'':`<button class="btn sm" data-act="cp" data-t="${h(ofLink(o.id))}">نسخ لينك العرض</button>`}</div>
+   <div class="row" style="flex-wrap:wrap">${o.status!=='won'?`<button class="btn sm good" data-act="ofWon">اتفقنا · حوّله لعميل</button>`:o.clientId?'<span class="small" style="color:var(--good)">اتسجّل في العملاء ✓</span>':''}${!['won','lost'].includes(o.status)?'<button class="btn sm" data-act="ofLost">اترفض</button>':''}<button class="btn sm danger" data-act="delAsk" data-what="offer">مسح</button></div><div id="delZone"></div></div>`)}
+function sheetSiteChat(cid){const c=(S.siteChats||[]).find(x=>x.id===cid);if(!c)return;S.edit={kind:'sitechat',id:cid};if(S.unsubSC)S.unsubSC();S.scMsgs=[];
+  if(c.unread)db.doc('siteChats/'+cid).update({unread:false}).catch(err);
+  const draw=()=>{const box=document.getElementById('scMs');if(!box)return;box.innerHTML=(S.scMsgs||[]).map(m=>`<div style="align-self:${m.from==='a'?'flex-end':'flex-start'};max-width:82%;padding:8px 12px;border-radius:14px;background:${m.from==='a'?'var(--accent)':'var(--surface)'};color:${m.from==='a'?'#fff':'var(--ink)'};white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid var(--line)">${linkify(m.t||'')}</div>`).join('')||'<p class="small muted">لسه مفيش رسايل.</p>';box.scrollTop=box.scrollHeight};
+  openSheet(`<div class="sheet-h"><div><h3>${h(c.name||'زائر')}</h3><div class="small muted" dir="ltr">${h(c.phone||'')}</div></div><button class="x" data-act="close" aria-label="قفل">×</button></div>
+   <div class="stack"><div id="scMs" style="display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow-y:auto;background:var(--bg);padding:10px;border-radius:12px"></div>
+   <div class="row" style="flex-wrap:nowrap"><input id="sc_t" placeholder="اكتب ردّك" style="flex:1"><button class="btn primary" data-act="scSend">ابعت</button></div>
+   <div class="row"><a class="btn sm" href="https://wa.me/${waPhone(c.phone)}" target="_blank" rel="noopener">كمّل معاه واتساب</a><button class="btn sm danger" data-act="delAsk" data-what="sitechat">مسح المحادثة</button></div><div id="delZone"></div><p class="small muted" style="margin:0">ردّك بيوصله فورًا لو فاتح الموقع، ولو قفله كمّل معاه واتساب.</p></div>`);
+  S.unsubSC=db.collection('siteChats/'+cid+'/msgs').orderBy('at').onSnapshot(s=>{S.scMsgs=s.docs.map(d=>({id:d.id,...d.data(SNAP)}));draw()},err)}
+// الميتنج: مهمة ليا وللتيم ليدر في يوم الميتنج
+async function ensureMeetTasks(){if(!(S.fin||S.tl)||!S.emps.length)return;S.mtDone??={};
+  for(const o of S.offers||[]){if(!['accepted','won'].includes(o.status)||!o.slot||o.tasked||S.mtDone[o.id])continue;S.mtDone[o.id]=1;
+    const date=o.slot.slice(0,10),ids=[...new Set([ownerEmpId(),...S.emps.filter(e=>has(e,'teamleader')).map(e=>e.id)].filter(Boolean))],tid='mt_'+o.id,t=`ميتنج أونلاين مع ${o.biz} الساعة ${ofHr(+o.slot.slice(11))}`;
+    try{for(const eid of ids){const ref=db.doc('tasks/'+eid+'_'+date),d=await ref.get(),x=d.exists?d.data():{emp:eid,date,items:[],msg:'',byName:'Pensell'};
+        if(!(x.items||[]).some(i=>i.id===tid))await ref.set({...x,items:[...(x.items||[]),{id:tid,k:'mt',t,done:false}]})}
+      await db.doc('offers/'+o.id).update({tasked:true})}catch(e){console.warn('meetTasks',e);delete S.mtDone[o.id]}}}
 function wsInbox(){const L=S.wsSubs||[];if(!L.length)return '';
   return `<div class="panel" style="border-color:var(--accent)"><h3>🌟 شغل مقترح من التيم · ${L.length}</h3><div class="stack" style="gap:10px;margin-top:8px">${L.map(x=>`<div class="en-row">${x.img?`<img src="${x.img}" alt="" style="max-height:180px;border-radius:10px;object-fit:contain">`:''}
     <div><b>${h(x.title)}</b> <span class="pkg">${h(x.cat||'')}</span><div class="small muted">${h(x.name||'')} · ${atTxt(x.at)}</div></div>${x.desc?`<div style="white-space:pre-wrap">${h(x.desc)}</div>`:''}${x.link?`<a class="small" href="${h(x.link)}" target="_blank" rel="noopener" dir="ltr" style="overflow-wrap:anywhere">${h(x.link)}</a>`:''}
@@ -1142,7 +1202,7 @@ const WORK_CATS=['تصميم','تصوير','فيديو','إدارة صفحات',
 const SEED_SVC=[['إدارة الصفحات','خطة محتوى شهرية، كتابة البوستات والكابشنز، النشر، والرد على الرسايل والكومنتات.','باقات شهرية'],['تصوير ومونتاج','جلسات تصوير للمنتجات والأماكن، وريلز وفيديوهات بمونتاج احترافي.','حسب عدد الجلسات'],['تصميم جرافيك','تصميمات السوشيال ميديا، الهوية البصرية، والمنيوهات والمطبوعات.',''],['إعلانات ممولة','إدارة الحملات على فيسبوك وانستجرام وتيك توك، واستهداف يجيبلك عملاء.',''],['كتابة سكريبت وإخراج','أفكار وسكريبتات للفيديوهات والإعلانات، وإخراج التصوير.','']];
 function vSite(){
   const st=S.site||{},sv=S.svcs||[],wk=S.works||[];
-  return `<div class="stack">${wsInbox()}<div class="row between"><h2>صفحة العملاء</h2><div class="row"><button class="btn sm" data-act="cp" data-t="${h(SITE_URL())}">نسخ اللينك</button><a class="btn sm primary" href="${h(SITE_URL())}" target="_blank" rel="noopener">افتح الصفحة ↗</a></div></div>
+  return `<div class="stack">${offersInbox()}${siteChatsInbox()}${wsInbox()}<div class="row between"><h2>صفحة العملاء</h2><div class="row"><button class="btn sm" data-act="cp" data-t="${h(SITE_URL())}">نسخ اللينك</button><a class="btn sm primary" href="${h(SITE_URL())}" target="_blank" rel="noopener">افتح الصفحة ↗</a></div></div>
   <p class="small muted" style="margin:0">صفحة عامة أي حد يفتحها من غير تسجيل دخول. أي تعديل هنا بيظهر عليها على طول. اللينك: <span dir="ltr" style="word-break:break-all">${h(SITE_URL())}</span></p>
   <div class="panel stack"><h3>البايو والتواصل</h3>
    <div class="field"><label class="label" for="si_tag">الجملة الكبيرة فوق (آخر كلمة بتطلع بالأحمر)</label><input id="si_tag" value="${h(st.tagline||'')}" placeholder="محتوى بيتكتب علشان يبيع"></div>
@@ -1535,7 +1595,7 @@ function vSet(){
 
 /* ---------- sheets ---------- */
 function openSheet(html){document.getElementById('sheetRoot').innerHTML=`<div class="shade" data-act="shade"><div class="sheet" role="dialog" aria-modal="true">${html}</div></div>`}
-function closeSheet(){document.getElementById('sheetRoot').innerHTML='';S.edit=null;render()}
+function closeSheet(){if(S.unsubSC){S.unsubSC();S.unsubSC=null}document.getElementById('sheetRoot').innerHTML='';S.edit=null;render()}
 function sheetClient(id){
   const c=id?cli(id):{name:'',phone:''};S.edit={kind:'client',id};
   openSheet(`<div class="sheet-h"><h3>${id?'بيانات العميل':'عميل جديد'}</h3><button class="x" data-act="close" aria-label="قفل">×</button></div>
@@ -1717,6 +1777,7 @@ function sheetView(id,refresh){
 }
 
 /* ---------- events ---------- */
+document.addEventListener('keydown',e=>{if(e.target.id==='sc_t'&&e.key==='Enter'&&!e.isComposing){e.preventDefault();document.querySelector('[data-act=scSend]')?.click()}});
 document.addEventListener('input',e=>{
   if(S.edit?.kind==='free'&&/^fr_(price|base|mk|sp_)/.test(e.target.id||''))frCalc();
   if(e.target.id==='fr_xn'){const x=(S.extCli||[]).find(c=>c.name.trim()===e.target.value.trim()),p=document.getElementById('fr_xp');if(x&&p&&x.phone)p.value=x.phone}
@@ -1938,6 +1999,23 @@ document.addEventListener('click',async e=>{
     const list=[...(S.myAsks||[]),{id:uid(),t:t.slice(0,600),at:Date.now(),done:false}].slice(-30);
     if(await save(()=>db.doc('asks/'+S.me.id).set({emp:S.me.id,name:S.me.name||'',list}),'اتبعتت للإدارة والتيم ليدر ✓')){S.myAsks=list;document.getElementById('ask_t').value='';pushAsk(t)}b.disabled=false;return}
   if(a==='msgSeen'){if(!S.me||!S.myTask)return;b.disabled=true;S.myTask={...S.myTask,msgSeen:true};if(!await save(()=>db.doc('tasks/'+S.me.id+'_'+today()).update({msgSeen:true}),'تمام ✓'))b.disabled=false;render();return}
+  if(a==='ofOpen')return sheetOffer(b.dataset.id);
+  if(a==='ofAll'){S.ofAll=!S.ofAll;render();return}
+  if(a==='scAll'){S.scAll=!S.scAll;render();return}
+  if(a==='scOpen')return sheetSiteChat(b.dataset.id);
+  if(a==='ofSend'){const o=(S.offers||[]).find(x=>x.id===S.edit?.id);if(!o)return;const price=n('of_price'),note=v('of_note');if(!price)return toast('اكتب السعر');
+    const w=window.open(`https://wa.me/${waPhone(o.phone)}?text=${encodeURIComponent(ofMsg(o,price,note))}`,'_blank','noopener');const ms=Date.now()+3*864e5;
+    if(await save(()=>db.doc('offers/'+o.id).update({status:'sent',final:price,note,expMs:ms,expiresAt:firebase.firestore.Timestamp.fromMillis(ms),sentAt:firebase.firestore.FieldValue.serverTimestamp()}),'العرض اتبعت · ساري 3 أيام'))closeSheet();return}
+  if(a==='ofMeet'){const o=(S.offers||[]).find(x=>x.id===S.edit?.id);if(!o)return;let u=v('of_meet');if(!u)return toast('حط لينك الميتنج');if(!/^https?:\/\//.test(u))u='https://'+u;
+    window.open(`https://wa.me/${waPhone(o.phone)}?text=${encodeURIComponent(`أهلاً ${o.name||''} 👋\nميعاد الميتنج بتاعنا ${ofSlot(o.slot)}.\nده لينك الميتنج:\n${u}`)}`,'_blank','noopener');
+    await save(()=>db.doc('offers/'+o.id).update({meet:u}),'لينك الميتنج اتحفظ');return}
+  if(a==='ofLost'){const o=(S.offers||[]).find(x=>x.id===S.edit?.id);if(o&&await save(()=>db.doc('offers/'+o.id).update({status:'lost'}),'اتقفل'))closeSheet();return}
+  if(a==='ofWon'){const o=(S.offers||[]).find(x=>x.id===S.edit?.id);if(!o)return;b.disabled=true;const dig=x=>String(x||'').replace(/\D/g,'').slice(-10);
+    let c=S.clients.find(x=>dig(x.phone)&&dig(x.phone)===dig(o.phone))||S.clients.find(x=>x.name.trim()===o.biz.trim());const id=c?.id||uid();
+    const ok=await save(async()=>{if(!c)await db.doc('clients/'+id).set({name:o.biz,phone:o.phone||'',active:true,code:Math.max(0,...S.clients.map(x=>x.code||0))+1});await db.doc('offers/'+o.id).update({status:'won',clientId:id})},c?'اتفقنا ✓ العميل موجود قبل كده':'اتفقنا ✓ واتسجّل في العملاء');
+    if(ok)closeSheet();else b.disabled=false;return}
+  if(a==='scSend'){const cid=S.edit?.id,t=v('sc_t');if(!cid||!t)return;document.getElementById('sc_t').value='';const TS=firebase.firestore.FieldValue.serverTimestamp();
+    if(!await save(()=>{const bt=db.batch();bt.set(db.collection('siteChats/'+cid+'/msgs').doc(),{t:t.slice(0,1000),from:'a',at:TS});bt.update(db.doc('siteChats/'+cid),{at:TS,last:t.slice(0,200),lastFrom:'a',unread:false});return bt.commit()}))document.getElementById('sc_t').value=t;return}
   if(a==='attJump'){document.getElementById('sec_'+b.dataset.k)?.scrollIntoView({behavior:'smooth',block:'start'});return}
   if(a==='sendNotif'){const to=v('nt_to'),t=(document.getElementById('nt_t')?.value||'').trim();if(!t)return toast('اكتب الرسالة');b.disabled=true;
     try{const tok=await auth.currentUser.getIdToken(),r=await fetch(pushUrl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'notify',idToken:tok,to:to==='team'?'team':[to],text:t.slice(0,300)})}),j=await r.json();
@@ -1976,7 +2054,8 @@ document.addEventListener('click',async e=>{
   if(a==='delAsk'){document.getElementById('delZone').innerHTML=`<div class="notice row between"><span>${/^client/.test(b.dataset.what)?'العميل هيتمسح بالكامل: فواتيره وتوزيعه وخططه والبريف. متأكد؟':'المسح نهائي. متأكد؟'}</span><div class="row"><button class="btn sm danger" data-act="delYes" data-what="${b.dataset.what}">أيوه امسح</button><button class="btn sm" data-act="delNo">لأ</button></div></div>`;return}
   if(a==='delNo'){document.getElementById('delZone').innerHTML='';return}
   if(a==='delYes'&&(b.dataset.what==='clientR'||b.dataset.what==='client')){b.disabled=true;if(await save(()=>purgeClient(b.dataset.what==='client'?S.edit.id:S.edit.clientId),'العميل اتمسح بالكامل'))closeSheet();else b.disabled=false;return}
-  if(a==='delYes'){const w=b.dataset.what,ref=w==='brand'?db.doc('site/main/brands/'+S.edit.id):w==='free'?db.doc('fin/main/freelance/'+S.edit.id):w==='svc'?db.doc('site/main/services/'+S.edit.id):w==='work'?db.doc('site/main/works/'+S.edit.id):w==='client'?db.doc('clients/'+S.edit.id):w==='emp'?db.doc('employees/'+S.edit.id):db.doc('fin/main').collection('invoices').doc(S.edit.id);if(await save(()=>ref.delete(),'اتمسح'))closeSheet();return}
+  if(a==='delYes'&&b.dataset.what==='sitechat'){const cid=S.edit.id;if(await save(async()=>{const m=await db.collection('siteChats/'+cid+'/msgs').get();const bt=db.batch();m.docs.forEach(d=>bt.delete(d.ref));bt.delete(db.doc('siteChats/'+cid));await bt.commit()},'اتمسحت'))closeSheet();return}
+  if(a==='delYes'){const w=b.dataset.what,ref=w==='brand'?db.doc('site/main/brands/'+S.edit.id):w==='free'?db.doc('fin/main/freelance/'+S.edit.id):w==='offer'?db.doc('offers/'+S.edit.id):w==='svc'?db.doc('site/main/services/'+S.edit.id):w==='work'?db.doc('site/main/works/'+S.edit.id):w==='client'?db.doc('clients/'+S.edit.id):w==='emp'?db.doc('employees/'+S.edit.id):db.doc('fin/main').collection('invoices').doc(S.edit.id);if(await save(()=>ref.delete(),'اتمسح'))closeSheet();return}
   if(a==='attS'){const r=(S.attDraft.rows[b.dataset.e]??={s:'present'});r.s=b.dataset.s;if(r.s==='present')r.cover=null;render();return}
   if(a==='addDg'){S.attDraft.designs.push({e:S.emps.find(x=>has(x,'designer'))?.id||S.emps[0]?.id,a:'',t:'ديزاين'});render();return}
   if(a==='rmDg'){S.attDraft.designs.splice(+b.dataset.i,1);render();return}
@@ -2026,6 +2105,7 @@ document.addEventListener('click',async e=>{
       for(const k of Object.keys(EN))for(const x of body[k])if(x.e===e.id){const t=taskLabel(k,x);items.push({id:x.id,k,t,done:!!was(x.id,t)?.done,...(x.note?{note:x.note}:{}),...(x.link?{link:x.link}:{}),...(x.ok!=null?{ok:x.ok}:{}),...(x.by?{byEmp:emp(x.by)?.name||''}:{}),...(x.why?{why:x.why}:{})})}
       for(const x of body.shoots||[]){const c=clName(x.a);if(x.dir===e.id&&x.dir!==x.e)items.push({id:x.id+'_d',k:'sd',t:`إخراج · ${c}`,done:!!was(x.id+'_d')?.done});
         if(x.ed===e.id)items.push({id:x.id+'_m',k:'se',t:`مونتاج · ${c}${x.n?' · '+x.n+' فيديو':''}`,done:!!was(x.id+'_m')?.done})}
+      for(const x of oldIt)if(x.k==='mt'&&!items.some(y=>y.id===x.id))items.push(x);
       const X=D.extra[e.id]??xtraOf(e.id);X.t.split('\n').map(z=>z.trim()).filter(Boolean).forEach(t=>{const id='x'+hashStr(t);items.push({id,k:'x',t,done:!!was(id,t)?.done})});
       const msg=(X.msg||'').trim();if(!old&&!items.length&&!msg)continue;
       if(old&&JSON.stringify(oldIt)===JSON.stringify(items)&&(old.msg||'')===msg)continue;
