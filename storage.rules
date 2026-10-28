@@ -4,10 +4,22 @@ service firebase.storage {
     function em() { return request.auth.token.email.lower(); }
     function lead() { return em() in ['ahmedassemads@gmail.com'] || em() in firestore.get(/databases/(default)/documents/cfg/roles).data.get('tl', []); }
     function sees(rid) { return em() in firestore.get(/databases/(default)/documents/reqs/$(rid)).data.see; }
+    function clientOf(cid) { return firestore.exists(/databases/(default)/documents/clientUsers/$(em())) && firestore.get(/databases/(default)/documents/clientUsers/$(em())).data.cid == cid; }
     // ملفات طلبات الأكونتات (الريفرنس والتسليم): اللي يشوف الطلب بس
     match /reqs/{rid}/{file} {
       allow read: if request.auth != null && (lead() || sees(rid));
       allow create: if request.auth != null && request.resource.size < 50 * 1024 * 1024 && (lead() || sees(rid));
+      allow delete: if request.auth != null && lead();
+    }
+    // «بيزنسي»: ملفات طلبات العميل وسكرين التحويل
+    match /creqs/{cid}/{file} {
+      allow read: if request.auth != null && (lead() || clientOf(cid));
+      allow create: if request.auth != null && request.resource.size < 25 * 1024 * 1024 && (lead() || clientOf(cid));
+      allow delete: if request.auth != null && lead();
+    }
+    match /cinv/{cid}/{file} {
+      allow read: if request.auth != null && (lead() || clientOf(cid));
+      allow create: if request.auth != null && request.resource.size < 10 * 1024 * 1024 && clientOf(cid);
       allow delete: if request.auth != null && lead();
     }
   }
