@@ -130,6 +130,7 @@ h4{font-size:14px;margin:0;font-weight:600}
 .demo{font-size:11px;background:var(--gold-soft);color:var(--gold);padding:1px 7px;border-radius:6px;margin-inline-start:6px}
 .bar{display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--bg)}
 .bar i{display:block;height:100%}
+.rq-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}.rq-th{display:block;position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--bg);border:1px solid var(--line);text-decoration:none;color:var(--ink)}.rq-th img{width:100%;height:100%;object-fit:cover}.rq-th span{display:grid;place-items:center;height:100%;padding:6px;font-size:12px;text-align:center;overflow-wrap:anywhere}.rq-th i{position:absolute;inset-inline:0;bottom:0;font-style:normal;font-size:11px;padding:2px 6px;background:rgba(0,0,0,.55);color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .att-nav{position:sticky;top:var(--navH,0px);z-index:5;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:8px 0;margin:-4px 0;background:var(--bg)}.att-nav::-webkit-scrollbar{display:none}.att-nav .chip{flex:none}[id^=sec_]{scroll-margin-top:150px}
 .today-t td{vertical-align:top}.today-t tr.sub td{padding-top:0;border-top:0}.today-it{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:12.5px;color:var(--muted)}.today-it .ok{color:var(--good)}.today-msg{font-size:13px;padding:6px 10px;border-radius:8px;background:var(--accent-soft);color:var(--accent);margin-bottom:4px}.today-msg .tick{margin-inline-start:6px;opacity:.6}.today-msg.seen .tick{opacity:1}.today-msg.seen{background:color-mix(in srgb,var(--good) 14%,transparent);color:var(--good)}.today-it .no{color:var(--bad)}
 .legend{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px 16px;margin-top:12px}
@@ -207,6 +208,7 @@ details.pct[open] summary{margin-bottom:10px}
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
 </head>
 <body>
 <header>
@@ -381,6 +383,7 @@ async function start(u){
   if(S.mode==='checkin')S.tab='me';else if(!S.fin&&S.tab!=='me')S.tab='att';
   mainEl().innerHTML='<div class="empty"><h3>بيحمّل…</h3></div>';
   db.doc('cfg/settings').onSnapshot(s=>{if(s.exists)S.cfg={...S.cfg,...s.data()};subscribePush();rr()},err);
+  reqsSub();if(location.hash==='#reqs'&&(own||tl))S.tab='reqs';
   if(/^#(chat-|call)/.test(location.hash))S.pendingHash=location.hash;
   if(location.hash==='#me'&&S.mode==='app')S.tab='me';if(location.hash==='#site'&&own)S.tab='site';
   const empQ=S.mode==='app'?db.collection('employees'):db.collection('employees').where('email','==',S.email);
@@ -561,8 +564,8 @@ function recPreview(r){
 }
 
 /* ---------- render ---------- */
-const TABS_FIN=[['home','الشهر'],['acc','العملاء'],['brief','الأكونتات'],['dist','التوزيع'],['att','المتابعة اليومية'],['today','مهام اليوم'],['free','فريلانس'],['pay','المرتبات'],['star','نجم الشهر'],['team','الفريق'],['site','الموقع'],['set','الإعدادات']];
-const TABS_TL=[['att','المتابعة اليومية'],['today','مهام اليوم'],['brief','الأكونتات'],['dist','التوزيع'],['free','فريلانس']];
+const TABS_FIN=[['home','الشهر'],['acc','العملاء'],['brief','الأكونتات'],['dist','التوزيع'],['att','المتابعة اليومية'],['reqs','الطلبات'],['today','مهام اليوم'],['free','فريلانس'],['pay','المرتبات'],['star','نجم الشهر'],['team','الفريق'],['site','الموقع'],['set','الإعدادات']];
+const TABS_TL=[['att','المتابعة اليومية'],['reqs','الطلبات'],['today','مهام اليوم'],['brief','الأكونتات'],['dist','التوزيع'],['free','فريلانس']];
 // بيانات صفحة العملاء (فيها صور تقيلة) بتتحمّل بس لما تفتح تبويب «الموقع»
 function ensureSite(){if(S.siteSub||!S.fin)return;S.siteSub=1;
   db.doc('site/main').onSnapshot(s=>{S.site=s.exists?s.data():{};rr()},err);
@@ -575,7 +578,7 @@ function render(){
   if(S.tab==='site')ensureSite();
   if(!S.started||S.mode==='screen')return;
   document.getElementById('mLabel').textContent=mName(S.month);
-  const askN=openAsks().length,meT=askN?`صفحتي (${askN})`:'صفحتي';const brN=(S.briefReqs||[]).filter(x=>!x.done).length;const wsN=(S.wsSubs||[]).length;const tabs=(S.mode==='checkin'?[]:S.fin?[...TABS_FIN,['me',meT]]:[...TABS_TL,['me',meT]]).map(([k,n])=>k==='brief'&&brN?[k,`${n} (${brN})`]:k==='site'&&(wsN+ofSiteN())?[k,`${n} (${wsN+ofSiteN()})`]:[k,n]);const un=chatUnread();
+  const askN=openAsks().length,meT=askN?`صفحتي (${askN})`:'صفحتي';const brN=(S.briefReqs||[]).filter(x=>!x.done).length;const wsN=(S.wsSubs||[]).length;const tabs=(S.mode==='checkin'?[]:S.fin?[...TABS_FIN,['me',meT]]:[...TABS_TL,['me',meT]]).map(([k,n])=>k==='brief'&&brN?[k,`${n} (${brN})`]:k==='site'&&(wsN+ofSiteN())?[k,`${n} (${wsN+ofSiteN()})`]:k==='reqs'&&(S.reqs||[]).some(r=>['pending','review'].includes(r.status))?[k,`${n} (${(S.reqs||[]).filter(r=>['pending','review'].includes(r.status)).length})`]:[k,n]);const un=chatUnread();
   document.getElementById('tabs').hidden=!tabs.length||S.tab==='chat';
   if(S.tab!=='chat'&&tabs.length&&!tabs.some(t=>t[0]===S.tab))S.tab=tabs[0][0];
   paintFab(un);
@@ -587,7 +590,7 @@ function render(){
   if(a&&main.contains(a)&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)&&!qa)return;
   if(S.edit&&S.edit.kind==='view')sheetView(S.edit.id,true);
   {const hd=document.querySelector('header');if(hd)document.documentElement.style.setProperty('--navH',hd.offsetHeight+'px')}
-  main.innerHTML=({brief:vBriefs,sum:vSum,today:vToday,home:vHome,acc:vAcc,dist:vDist,team:vTeam,att:vAtt,tasks:vTasks,pay:vPay,star:vStar,site:vSite,free:vFree,rate:vRate,set:vSet,me:vCheckin,chat:vChat}[S.tab]||vCheckin)();
+  main.innerHTML=({brief:vBriefs,sum:vSum,today:vToday,reqs:vReqs,home:vHome,acc:vAcc,dist:vDist,team:vTeam,att:vAtt,tasks:vTasks,pay:vPay,star:vStar,site:vSite,free:vFree,rate:vRate,set:vSet,me:vCheckin,chat:vChat}[S.tab]||vCheckin)();
   if(S.tab==='chat')paintChat(true);
   if(qa)document.getElementById('qa_name')?.focus();
 }
@@ -819,6 +822,101 @@ async function ensureMeetTasks(){if(!(S.fin||S.tl)||!S.emps.length)return;S.mtDo
     try{for(const eid of ids){const ref=db.doc('tasks/'+eid+'_'+date),d=await ref.get(),x=d.exists?d.data():{emp:eid,date,items:[],msg:'',byName:'Pensell'};
         if(!(x.items||[]).some(i=>i.id===tid))await ref.set({...x,items:[...(x.items||[]),{id:tid,k:'mt',t,done:false}]})}
       await db.doc('offers/'+o.id).update({tasked:true})}catch(e){console.warn('meetTasks',e);delete S.mtDone[o.id]}}}
+/* ---------- طلبات الأكونتات: الكريتور بيطلب، المدير أو التيم ليدر بيوافق، والمطلوب منه بيسلّم في نفس المكان ---------- */
+const RQ_T={design:{n:'ديزاين',role:'designer',k:'designs'},video:{n:'فيديو للمونتاج',role:'editor',k:'edits'},ads:{n:'إعلان ممول',role:'mediabuyer',k:'ads'},other:{n:'حاجة تانية',role:null}};
+const RQ_S={pending:['مستني موافقة','unpaid'],todo:['شغالة','none'],changes:['محتاجة تعديل','red'],review:['مستني مراجعة','unpaid'],done:['خلصت ✓','paid'],rejected:['اترفضت','none']};
+const isLead=()=>!!(S.fin||S.tl);
+const meEmail=()=>String(S.email||'').toLowerCase();
+const rqPeople=()=>{const P=chatPeople();if(P.length)return P;return S.emps.filter(e=>e.email).map(e=>({id:e.id,name:e.name,roles:rolesOf(e),email:(e.email||'').toLowerCase()}))};
+const rqPerson=id=>rqPeople().find(p=>p.id===id);
+const rqLabel=r=>`${RQ_T[r.type]?.n||'طلب'} · ${r.cname||''}${r.title?' · '+r.title:''}`;
+const rqDay=d=>{const x=new Date(d+'T12:00:00Z');return `${['الأحد','الاتنين','التلات','الأربع','الخميس','الجمعة','السبت'][x.getUTCDay()]} ${x.getUTCDate()}/${x.getUTCMonth()+1}`};
+const tomorrow=()=>{const x=new Date(today()+'T12:00:00Z');x.setUTCDate(x.getUTCDate()+1);if(x.getUTCDay()===5)x.setUTCDate(x.getUTCDate()+1);return x.toISOString().slice(0,10)};
+// أكونتات الكريتور (من التوزيع)
+const myCrAccs=()=>{const m=today().slice(0,7),L=(S.myMine?.byMonth||{})[m]||[],seen=new Set();return L.filter(a=>a.r==='كريتور'&&a.cid&&!seen.has(a.cid)&&seen.add(a.cid)).map(a=>({cid:a.cid,name:a.c,dz:a.dz||''}))};
+function reqsSub(){if(!db||S.unsubRq)return;const q=isLead()?db.collection('reqs'):db.collection('reqs').where('see','array-contains',meEmail());
+  S.unsubRq=q.onSnapshot(s=>{S.reqs=s.docs.map(d=>({id:d.id,...d.data(SNAP)})).sort((a,b)=>(b.at?.toMillis?.()||0)-(a.at?.toMillis?.()||0));if(S.edit?.kind==='req'){const r=S.reqs.find(x=>x.id===S.edit.id),j=JSON.stringify(r||null);if(j!==S.edit.j&&!S.edit.busy){rqdRead();sheetReq(S.edit.id)}}rr()},err)}
+function rqdRead(){const E=S.edit;if(!E||E.kind!=='req')return;const l=document.getElementById('rqd_l'),nn=document.getElementById('rqd_n');if(l)E.links=l.value;if(nn)E.note=nn.value}
+const rqPush=(id,ev)=>{if(!auth.currentUser)return;auth.currentUser.getIdToken().then(t=>fetch(pushUrl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'req',idToken:t,id,ev})})).catch(()=>{})};
+const rqCard=r=>{const st=RQ_S[r.status]||RQ_S.pending,to=rqPerson(r.to)?.name||r.toName||'';
+  return `<div class="item" style="align-items:flex-start"><div class="grow" style="min-width:0"><b>${h(r.title||RQ_T[r.type]?.n)}</b> <span class="pill ${st[1]}">${st[0]}</span>
+   <div class="small muted">${h(r.cname||'')} · ${h(RQ_T[r.type]?.n||'')}${to?' · لـ '+h(to):''}${r.due?' · '+rqDay(r.due):''}</div></div><button class="btn sm ${(isLead()&&['pending','review'].includes(r.status))||(r.to===S.me?.id&&['todo','changes'].includes(r.status))?'primary':''}" data-act="rqOpen" data-id="${r.id}">افتح</button></div>`};
+// تبويب «الطلبات» للمدير والتيم ليدر
+function vReqs(){const L=S.reqs||[],f=S.rqF||'act',acc=S.rqA||'';
+  const groups={act:['pending','review'],work:['todo','changes'],done:['done'],all:null};
+  const cnt=k=>L.filter(r=>!groups[k]||groups[k].includes(r.status)).length;
+  const list=L.filter(r=>(!groups[f]||groups[f].includes(r.status))&&(!acc||r.cid===acc));
+  return `<div class="stack"><div class="row between"><h2>الطلبات</h2><button class="btn primary" data-act="rqNew">+ طلب جديد</button></div>
+   <p class="small muted" style="margin:0">الكريتور بيطلب من الديزاينر أو المونتير أو الميديا باير. لما توافق، الطلب بيتحول مهمة عند اللي مطلوب منه. ولما يسلّم وتوافق على التسليم، بيتعلّم «تم فعلاً» في المتابعة اليومية لوحده.</p>
+   <div class="row" style="flex-wrap:wrap;gap:6px"><div class="seg">${[['act','محتاج منك'],['work','شغالة'],['done','خلصت'],['all','الكل']].map(([k,nm])=>`<button class="${f===k?'on p':''}" data-act="rqF" data-k="${k}">${nm} (${cnt(k)})</button>`).join('')}</div>
+    <select id="rqAcc" style="width:auto"><option value="">كل الأكونتات</option>${S.clients.filter(c=>c.active!==false).map(c=>`<option value="${c.id}" ${acc===c.id?'selected':''}>${h(c.name)}</option>`).join('')}</select></div>
+   <div class="panel">${list.length?`<div class="list">${list.map(rqCard).join('')}</div>`:`<p class="small muted" style="margin:0">${f==='act'?'مفيش طلبات مستنياك دلوقتي.':'مفيش طلبات هنا.'}</p>`}</div></div>`}
+// في «صفحتي»: المطلوب منك، وأكونتاتك (للكريتور)، وطلباتك
+function reqsPanel(){const me=S.me;if(!me)return '';const L=S.reqs||[];
+  const mine=L.filter(r=>r.to===me.id&&['todo','changes'].includes(r.status)),asked=L.filter(r=>r.by===me.id&&!['done','rejected'].includes(r.status)),accs=has(me,'creator')?myCrAccs():[];
+  if(!mine.length&&!asked.length&&!accs.length)return '';
+  return `<div class="panel stack" style="gap:10px"><div class="row between"><h3>الطلبات</h3>${mine.length?`<span class="pill red">${mine.length} مطلوب منك</span>`:''}</div>
+   ${mine.length?`<div><div class="label" style="margin-bottom:4px">مطلوب منك</div><div class="list">${mine.map(rqCard).join('')}</div></div>`:''}
+   ${accs.length?`<div><div class="label" style="margin-bottom:6px">لوحة كل أكونت</div><div class="row" style="flex-wrap:wrap;gap:6px">${accs.map(a=>{const n=L.filter(r=>r.cid===a.cid&&!['done','rejected'].includes(r.status)).length;return `<button class="btn sm" data-act="rqBoard" data-c="${a.cid}" data-n="${h(a.name)}">${h(a.name)}${n?` (${n})`:''}</button>`}).join('')}</div></div>`:''}
+   ${asked.length?`<div><div class="label" style="margin-bottom:4px">طلباتك</div><div class="list">${asked.map(rqCard).join('')}</div></div>`:''}</div>`}
+// لوحة الأكونت: كل طلباته والتسليمات
+function sheetBoard(cid,name){S.edit={kind:'board',cid,name};const L=(S.reqs||[]).filter(r=>r.cid===cid),open=L.filter(r=>!['done','rejected'].includes(r.status)),done=L.filter(r=>r.status==='done');
+  openSheet(`<div class="sheet-h"><div><h3>${h(name)}</h3><div class="small muted">لوحة الطلبات</div></div><button class="x" data-act="close" aria-label="قفل">×</button></div><div class="stack">
+   <button class="btn primary" data-act="rqNew" data-c="${cid}" style="justify-content:center">+ طلب جديد للأكونت ده</button>
+   <div><div class="label" style="margin-bottom:4px">شغالة</div>${open.length?`<div class="list">${open.map(rqCard).join('')}</div>`:'<p class="small muted" style="margin:0">مفيش طلبات شغالة.</p>'}</div>
+   ${done.length?`<div><div class="label" style="margin-bottom:6px">اتسلّمت</div><div class="rq-grid">${done.slice(0,40).flatMap(r=>(r.deliver||[]).map(f=>rqThumb(f,r))).join('')}</div>${done.some(r=>(r.dLinks||[]).length)?`<div class="small" style="margin-top:6px">${done.flatMap(r=>(r.dLinks||[]).map(u=>`<div>${h(r.title||'')}: ${linkify(u)}</div>`)).join('')}</div>`:''}</div>`:''}</div>`)}
+const isImg=f=>/^image\//.test(f.type||'')||/\.(png|jpe?g|webp|gif)$/i.test(f.name||'');
+const rqThumb=(f,r)=>`<a class="rq-th" href="${h(f.url)}" target="_blank" rel="noopener" title="${h(f.name||'')}">${isImg(f)?`<img src="${h(f.url)}" alt="${h(f.name||'')}" loading="lazy">`:`<span>${h((f.name||'ملف').slice(0,24))}</span>`}${r?`<i>${h(r.title||'')}</i>`:''}</a>`;
+// طلب جديد
+function sheetReqNew(cid){const lead=isLead(),accs=lead?S.clients.filter(c=>c.active!==false).map(c=>({cid:c.id,name:c.name})):myCrAccs();
+  const E=S.edit?.kind==='rqnew'?S.edit:{kind:'rqnew',cid:cid||accs[0]?.cid||'',type:'design',to:'',title:'',desc:'',due:tomorrow(),n:1,amt:'',links:'',files:[]};S.edit=E;
+  if(!E.to)E.to=rqDefTo(E.type,E.cid);
+  const role=RQ_T[E.type].role,P=rqPeople(),pref=role?P.filter(p=>(p.roles||[]).includes(role)):[],rest=P.filter(p=>!pref.includes(p));
+  openSheet(`<div class="sheet-h"><h3>طلب جديد</h3><button class="x" data-act="close" aria-label="قفل">×</button></div><div class="stack">
+   <div class="field"><label class="label" for="rq_c">الأكونت</label><select id="rq_c">${accs.map(a=>`<option value="${a.cid}" ${E.cid===a.cid?'selected':''}>${h(a.name)}</option>`).join('')}</select></div>
+   <div><div class="label" style="margin-bottom:6px">محتاج إيه؟</div><div class="chips">${Object.entries(RQ_T).map(([k,t])=>`<button class="chip ${E.type===k?'on':''}" data-act="rqType" data-k="${k}">${t.n}</button>`).join('')}</div></div>
+   <div class="field"><label class="label" for="rq_to">مطلوب من</label><select id="rq_to"><option value="">اختار</option>${pref.map(p=>`<option value="${p.id}" ${E.to===p.id?'selected':''}>${h(p.name)}</option>`).join('')}${rest.length?`<optgroup label="باقي الفريق">${rest.map(p=>`<option value="${p.id}" ${E.to===p.id?'selected':''}>${h(p.name)}</option>`).join('')}</optgroup>`:''}</select></div>
+   <div class="field"><label class="label" for="rq_t">عنوان قصير</label><input id="rq_t" value="${h(E.title)}" placeholder="${E.type==='design'?'مثلاً: بوست عرض الجمعة':E.type==='video'?'مثلاً: ريل افتتاح الفرع':E.type==='ads'?'مثلاً: تمويل بوست العرض':'اكتب المطلوب باختصار'}"></div>
+   <div class="field"><label class="label" for="rq_d">التفاصيل</label><textarea id="rq_d" rows="3" placeholder="الكلام اللي على الديزاين، المقاسات، الألوان، أي ملاحظة">${h(E.desc)}</textarea></div>
+   <div class="grid2"><div class="field"><label class="label" for="rq_due">مطلوب يوم</label><input id="rq_due" type="date" value="${h(E.due)}" min="${today()}"></div>
+    ${E.type==='video'?`<div class="field"><label class="label" for="rq_n">عدد الفيديوهات</label><input id="rq_n" type="number" min="1" value="${h(E.n)}"></div>`:E.type==='ads'?`<div class="field"><label class="label" for="rq_amt">مبلغ التمويل</label><input id="rq_amt" type="number" min="0" value="${h(E.amt)}"></div>`:'<div></div>'}</div>
+   <div class="field"><label class="label">الريفرنس (صور أو ملفات)</label><input type="file" id="rq_files" multiple accept="image/*,application/pdf">${E.files.length?`<div class="small muted">${E.files.length} ملف: ${h(E.files.map(f=>f.name).join('، '))}</div>`:''}</div>
+   <div class="field"><label class="label" for="rq_l">لينكات (اختياري)</label><textarea id="rq_l" rows="2" dir="ltr" placeholder="لينك درايف للداتا، أو لينك ريفرنس… كل لينك في سطر">${h(E.links)}</textarea></div>
+   ${E.prog?`<div class="small">${h(E.prog)}</div>`:''}
+   <button class="btn primary" data-act="rqSave" style="justify-content:center" ${E.busy?'disabled':''}>${lead?'ابعت الطلب (بيتحول مهمة على طول)':'ابعت الطلب للموافقة'}</button></div>`)}
+function rqDefTo(type,cid){const role=RQ_T[type].role;if(!role)return '';
+  if(type==='design'){if(isLead()){const A=S.asg?.[cid];const d=A?segAt(dSegs(A),+today().slice(8))?.e:'';if(d)return d}else{const a=myCrAccs().find(x=>x.cid===cid);if(a?.dz)return a.dz}}
+  const P=rqPeople().filter(p=>(p.roles||[]).includes(role));return P.length===1?P[0].id:''}
+function rqRead(){const E=S.edit;if(!E||E.kind!=='rqnew'||!document.getElementById('rq_t'))return;E.cid=v('rq_c');E.to=v('rq_to');E.title=v('rq_t');E.desc=v('rq_d');E.due=v('rq_due')||tomorrow();E.links=document.getElementById('rq_l').value;if(document.getElementById('rq_n'))E.n=Math.max(1,n('rq_n'));if(document.getElementById('rq_amt'))E.amt=n('rq_amt')}
+async function rqUpload(rid,files,onp){const out=[];let i=0;for(const f of files){i++;const safe=(f.name||'file').replace(/[^\w.\-]+/g,'_').slice(-60),path=`reqs/${rid}/${Date.now()}_${safe}`;
+    const ref=firebase.storage().ref(path);await new Promise((res,rej)=>{const t=ref.put(f,{contentType:f.type||'application/octet-stream'});t.on('state_changed',s=>onp&&onp(`بيترفع ${i} من ${files.length}… ${Math.round(s.bytesTransferred/(s.totalBytes||1)*100)}%`),rej,res)});
+    out.push({url:await ref.getDownloadURL(),name:f.name||safe,type:f.type||'',size:f.size||0,path})}return out}
+const splitLinks=t=>String(t||'').split(/\s+/).map(x=>x.trim()).filter(x=>/^https?:\/\/|^www\./i.test(x)).map(x=>/^www\./i.test(x)?'https://'+x:x).slice(0,10);
+async function rqToTask(r,day,prefix){const d=day||(r.due&&r.due>=today()?r.due:today()),ref=db.doc('tasks/'+r.to+'_'+d),s=await ref.get(),x=s.exists?s.data():{emp:r.to,date:d,items:[],msg:'',byName:'Pensell'},tid='rq_'+r.id,t=(prefix||'')+rqLabel(r);
+  const items=(x.items||[]).filter(i=>i.id!==tid);items.push({id:tid,k:'rq',rq:r.id,t,done:false});await ref.set({...x,items})}
+async function rqMarkTask(r,patch){for(const d of [...new Set([r.due,today()].filter(Boolean))]){const ref=db.doc('tasks/'+r.to+'_'+d),s=await ref.get();if(!s.exists)continue;const it=s.data().items||[];if(!it.some(i=>i.id==='rq_'+r.id))continue;
+    await ref.update({items:it.map(i=>i.id==='rq_'+r.id?{...i,...patch}:i)})}}
+// لما المدير يوافق على التسليم: بيتسجّل «تم فعلاً» في المتابعة اليومية النهارده
+async function rqToAtt(r){const T=RQ_T[r.type];if(!T.k)return;const d=today(),ref=db.doc('attendance/'+d),s=await ref.get(),x=s.exists?s.data():{date:d,rows:{},auto:true},id='rq_'+r.id;
+  const L=(x[T.k]||[]).filter(e=>e.id!==id);
+  L.push(T.k==='designs'?{id,e:r.to,a:r.cid,t:'ديزاين',n:1,ok:true,...(r.title?{idea:r.title}:{})}:T.k==='edits'?{id,e:r.to,a:r.cid,n:Math.max(1,+r.n||1),ok:true}:{id,e:r.to,a:r.cid,amt:+r.amt||0,ok:true,...((r.dLinks||[])[0]?{link:r.dLinks[0]}:{})});
+  await ref.set({...x,[T.k]:L})}
+function sheetReq(id,keep){const r=(S.reqs||[]).find(x=>x.id===id);if(!r)return;const prev=S.edit?.kind==='req'&&S.edit.id===id?S.edit:null;S.edit={kind:'req',id,view:1,j:JSON.stringify(r),files:prev?.files||[],links:prev?.links||'',note:prev?.note||'',prog:prev?.prog||''};const E=S.edit;
+  const lead=isLead(),amTo=r.to===S.me?.id,st=RQ_S[r.status]||RQ_S.pending,to=rqPerson(r.to)?.name||r.toName||'';
+  const canDeliver=amTo&&['todo','changes'].includes(r.status);
+  openSheet(`<div class="sheet-h"><div><h3>${h(r.title||RQ_T[r.type]?.n)}</h3><div class="small muted">${h(r.cname||'')} · ${h(RQ_T[r.type]?.n||'')}</div></div><button class="x" data-act="close" aria-label="قفل">×</button></div><div class="stack">
+   <div class="row" style="flex-wrap:wrap"><span class="pill ${st[1]}">${st[0]}</span><span class="small muted">من ${h(r.byName||'')}${to?' لـ '+h(to):''}${r.due?' · مطلوب '+rqDay(r.due):''}${r.type==='video'?' · '+(+r.n||1)+' فيديو':''}${r.type==='ads'&&+r.amt?' · '+money(r.amt)+' ج':''}</span></div>
+   ${r.desc?`<div style="white-space:pre-wrap">${linkify(r.desc)}</div>`:''}
+   ${(r.refs||[]).length||(r.links||[]).length?`<div><div class="label" style="margin-bottom:6px">الريفرنس</div><div class="rq-grid">${(r.refs||[]).map(f=>rqThumb(f)).join('')}</div>${(r.links||[]).map(u=>`<div class="small">${linkify(u)}</div>`).join('')}</div>`:''}
+   ${r.rev&&r.status==='changes'?`<div class="notice" style="margin:0"><b>التعديل المطلوب:</b> ${linkify(r.rev)}</div>`:''}
+   ${(r.deliver||[]).length||(r.dLinks||[]).length||r.dNote?`<div class="panel" style="border-color:var(--good)"><div class="label" style="margin-bottom:6px">التسليم</div><div class="rq-grid">${(r.deliver||[]).map(f=>rqThumb(f)).join('')}</div>${(r.dLinks||[]).map(u=>`<div class="small">${linkify(u)}</div>`).join('')}${r.dNote?`<div class="small" style="margin-top:4px;white-space:pre-wrap">${linkify(r.dNote)}</div>`:''}</div>`:''}
+   ${canDeliver?`<div class="panel stack" style="gap:8px"><h3>سلّم الشغل</h3><input type="file" id="rqd_files" multiple>${E.files.length?`<div class="small muted">${E.files.length} ملف: ${h(E.files.map(f=>f.name).join('، '))}</div>`:''}
+     <p class="small muted" style="margin:0">ارفع الديزاين أو الصور بجودتها الأصلية. الفيديوهات حطها على Drive وحط اللينك.</p>
+     <textarea id="rqd_l" rows="2" dir="ltr" placeholder="لينك Drive أو أي لينك، كل لينك في سطر">${h(E.links)}</textarea><input id="rqd_n" value="${h(E.note)}" placeholder="ملاحظة (اختياري)">${E.prog?`<div class="small">${h(E.prog)}</div>`:''}
+     <button class="btn primary" data-act="rqDeliver" style="justify-content:center" ${E.busy?'disabled':''}>سلّمت · ابعت للمراجعة</button></div>`:''}
+   ${lead&&r.status==='pending'?`<div class="row"><button class="btn primary" data-act="rqApprove">Approve · حوّلها مهمة</button><button class="btn" data-act="rqReject">ارفض</button></div>`:''}
+   ${lead&&r.status==='review'?`<div class="stack" style="gap:8px"><div class="row"><button class="btn good" data-act="rqDone">Approve · تم ✓</button></div><div class="row" style="flex-wrap:nowrap"><input id="rq_rev" placeholder="لو محتاج تعديل اكتبه هنا" style="flex:1"><button class="btn" data-act="rqChanges">اطلب تعديل</button></div></div>`:''}
+   ${lead||(r.by===S.me?.id&&r.status==='pending')?`<div class="row"><button class="btn sm danger" data-act="delAsk" data-what="req">مسح الطلب</button></div><div id="delZone"></div>`:''}</div>`)}
 function wsInbox(){const L=S.wsSubs||[];if(!L.length)return '';
   return `<div class="panel" style="border-color:var(--accent)"><h3>🌟 شغل مقترح من التيم · ${L.length}</h3><div class="stack" style="gap:10px;margin-top:8px">${L.map(x=>`<div class="en-row">${x.img?`<img src="${x.img}" alt="" style="max-height:180px;border-radius:10px;object-fit:contain">`:''}
     <div><b>${h(x.title)}</b> <span class="pkg">${h(x.cat||'')}</span><div class="small muted">${h(x.name||'')} · ${atTxt(x.at)}</div></div>${x.desc?`<div style="white-space:pre-wrap">${h(x.desc)}</div>`:''}${x.link?`<a class="small" href="${h(x.link)}" target="_blank" rel="noopener" dir="ltr" style="overflow-wrap:anywhere">${h(x.link)}</a>`:''}
@@ -863,7 +961,8 @@ function vCheckin(){
    ${T?.msg?`<div class="panel" style="border-color:var(--accent);background:var(--accent-soft)"><div class="label" style="color:var(--accent)">رسالة ليك${T.byName?' من '+h(T.byName):''}</div><div style="white-space:pre-wrap;margin-top:4px">${h(T.msg)}</div><div style="text-align:left;margin-top:6px">${T.msgSeen?'<span style="color:var(--good);font-size:18px;font-weight:700" aria-label="اتشافت">✓✓</span>':`<button class="btn sm primary" data-act="msgSeen" aria-label="اتشافت" style="min-width:44px;justify-content:center;font-size:16px">✓</button>`}</div></div>`:''}
    ${planDueBox(e,acc,m)}${repDue(e,acc,m)}
    <div class="panel"><div class="row between"><h3>مهام النهارده</h3>${items.length?`<span class="pill ${doneN===items.length?'paid':'unpaid'}">${doneN} من ${items.length}</span>`:''}</div>
-    ${items.length?`<div class="list" style="margin-top:6px">${items.map((x,i)=>`<label class="item" style="cursor:pointer;gap:10px;align-items:flex-start"><input type="checkbox" data-act="taskDone" data-i="${i}" ${x.done?'checked':''} style="margin-top:4px"><span class="grow" style="min-width:0"><span style="${x.done?'text-decoration:line-through;color:var(--muted)':''}">${h(x.t)}</span>${x.link?`<div class="small" style="overflow-wrap:anywhere"><a href="${h(x.link)}" target="_blank" rel="noopener" dir="ltr">${h(x.link)}</a></div>`:''}${x.note?`<div class="small muted" style="white-space:pre-wrap;overflow-wrap:anywhere">${linkify(x.note)}</div>`:''}${x.ok===true?'<div class="small" style="color:var(--good)">التيم ليدر أكّد إنها تمت ✓</div>':x.ok===false&&x.byEmp?`<div class="small" style="color:var(--gold)">متمّتش بسبب تأخير من ${h(x.byEmp)}${x.why?' ('+h(x.why)+')':''} · مش هتتخصم منك</div>`:x.ok===false?`<div class="small" style="color:var(--bad)">التيم ليدر علّم إنها متمّتش${x.why?' · '+h(x.why):''}</div>`:''}</span></label>`).join('')}</div>`:'<p class="small muted" style="margin:6px 0 0">مفيش مهام متسجّلة ليك النهارده.</p>'}</div>
+    ${items.length?`<div class="list" style="margin-top:6px">${items.map((x,i)=>`<label class="item" style="cursor:pointer;gap:10px;align-items:flex-start"><input type="checkbox" data-act="taskDone" data-i="${i}" ${x.done?'checked':''} style="margin-top:4px"><span class="grow" style="min-width:0"><span style="${x.done?'text-decoration:line-through;color:var(--muted)':''}">${h(x.t)}</span>${x.link?`<div class="small" style="overflow-wrap:anywhere"><a href="${h(x.link)}" target="_blank" rel="noopener" dir="ltr">${h(x.link)}</a></div>`:''}${x.note?`<div class="small muted" style="white-space:pre-wrap;overflow-wrap:anywhere">${linkify(x.note)}</div>`:''}${x.rq?`<div><button class="btn xs" data-act="rqOpen" data-id="${x.rq}" style="margin-top:4px">افتح الطلب</button></div>`:''}${x.ok===true?'<div class="small" style="color:var(--good)">التيم ليدر أكّد إنها تمت ✓</div>':x.ok===false&&x.byEmp?`<div class="small" style="color:var(--gold)">متمّتش بسبب تأخير من ${h(x.byEmp)}${x.why?' ('+h(x.why)+')':''} · مش هتتخصم منك</div>`:x.ok===false?`<div class="small" style="color:var(--bad)">التيم ليدر علّم إنها متمّتش${x.why?' · '+h(x.why):''}</div>`:''}</span></label>`).join('')}</div>`:'<p class="small muted" style="margin:6px 0 0">مفيش مهام متسجّلة ليك النهارده.</p>'}</div>
+   ${reqsPanel()}
    ${has(e,'moderator')?modPanel(p):''}
    ${askBox()}
    <div class="panel"><h3>أكونتاتك في ${mName(m)}</h3>${acc.length?`<div class="list" style="margin-top:6px">${acc.map(a=>{const rp=a.cid&&a.r==='كريتور'?S.myReps?.[repId(m,a.cid,e.id)]:null;return `<div class="item"><div class="grow" style="min-width:0"><b>${h(a.c)}</b> <span class="pkg on">${h(a.r)}</span>${a.from>1||a.to?` <span class="small muted">من يوم ${a.from||1}${a.to?' لـ '+a.to:''}</span>`:''}</div>${a.cid?`<div class="row" style="gap:4px"><button class="btn xs" data-act="briefView" data-c="${a.cid}" data-n="${h(a.c)}">بريف</button><button class="btn xs ${a.r==='كريتور'&&S.myPlans?.[planId(m,a.cid)]?.status!=='sent'?'primary':''}" data-act="planOpen" data-c="${a.cid}" data-n="${h(a.c)}" data-r="${h(a.r)}">${S.myPlans?.[planId(m,a.cid)]?.status==='sent'?'خطة الشهر ✓':'خطة الشهر'}</button>${a.r==='كريتور'?`<button class="btn xs ${rp?.status==='sent'?'':'primary'}" data-act="repOpen" data-c="${a.cid}" data-n="${h(a.c)}">${rp?.status==='sent'?'تقرير الشهر ✓':'تقرير الشهر'}</button>`:''}</div>`:''}</div>`}).join('')}</div>`:'<p class="small muted" style="margin:6px 0 0">لسه مفيش أكونتات متوزعة عليك الشهر ده.</p>'}</div>
@@ -911,7 +1010,7 @@ async function cleanClients(){if(!S.fin||S.cleaned||!S.clients?.length||!S.emps.
 async function rebuildMine(){
   const m=S.month,acc={};
   for(const a of Object.values(S.asg)){if(a.month!==m)continue;const c=a.clientName||cli(a.clientId)?.name||'';const segs=a.creator||[],cid=a.clientId;
-    segs.forEach((sg,i)=>{if(!sg.e)return;const to=i<segs.length-1?(+segs[i+1].from-1):null;(acc[sg.e]??=[]).push({c,cid,r:'كريتور',from:+sg.from||1,to})});
+    segs.forEach((sg,i)=>{if(!sg.e)return;const to=i<segs.length-1?(+segs[i+1].from-1):null;(acc[sg.e]??=[]).push({c,cid,dz:dSegs(a).slice(-1)[0]?.e||'',r:'كريتور',from:+sg.from||1,to})});
     const ds=dSegs(a);ds.forEach((sg,i)=>{if(!sg.e)return;const to=i<ds.length-1?(+ds[i+1].from-1):null;(acc[sg.e]??=[]).push({c,cid,r:'ديزاينر',...(ds.length>1?{from:+sg.from||1,to}:{})})});if(a.moderator)(acc[a.moderator]??=[]).push({c,cid,r:'موديريتور'})}
   const bt=db.batch();S.emps.forEach(e=>bt.set(db.doc('mine/'+e.id),{byMonth:{[m]:acc[e.id]||[]}},{merge:true}));await bt.commit();
 }
@@ -1397,15 +1496,15 @@ function vAtt(){
   const d=S.attDate,day=S.att[d]||{};
   if(!S.attLoaded)return `<div class="empty"><h3>بيحمّل…</h3></div>`;
   // المسودة بتتبني من آخر نسخة متحفظة، وبتتحدّث لوحدها طول ما مفيش تعديل
-  if(!S.attDraft||S.attDraft.date!==d||(!S.attDraft.dirty&&(S.attDraft.src!==S.att[d]||(!S.att[d]&&S.attDraft.pl!==S.plans)))){
+  if(!S.attDraft||S.attDraft.date!==d||(!S.attDraft.dirty&&(S.attDraft.src!==S.att[d]||((!S.att[d]||S.att[d].auto)&&S.attDraft.pl!==S.plans)))){
     const D={date:d,src:S.att[d],mods:JSON.parse(JSON.stringify(day.mods||{})),extra:{},covers:JSON.parse(JSON.stringify(day.covers||[]))};
     for(const k of Object.keys(EN))D[k]=JSON.parse(JSON.stringify(day[k]||[]));
-    D.pl=S.plans;if(!S.att[d])planFill(D,d);
+    D.pl=S.plans;if(!S.att[d]||S.att[d].auto)planFill(D,d);
     S.emptyMods=!day.mods;S.attDraft=D;
   }
   const D=S.attDraft;
   if(!S.emps.length)return `<div class="panel empty"><h3>مفيش موظفين لسه</h3><p>${S.fin?'ضيف الفريق من تبويب «الفريق» الأول.':'الإدارة لسه ماضافتش الفريق.'}</p></div>`;
-  const saved=!!S.att[d],accs=S.clients.filter(c=>c.active!==false),mods=S.emps.filter(e=>has(e,'moderator'));
+  const saved=!!S.att[d]&&!S.att[d].auto,accs=S.clients.filter(c=>c.active!==false),mods=S.emps.filter(e=>has(e,'moderator'));
   const empOpts=(sel,ex)=>`<option value="">محدش</option>`+S.emps.filter(x=>x.id!==ex).map(x=>`<option value="${x.id}" ${sel===x.id?'selected':''}>${h(x.name)} — ${h(rolesTxt(x))}</option>`).join('');
   const people=roles=>[...S.emps.filter(e=>roles.some(r=>has(e,r))),...S.emps.filter(e=>!roles.some(r=>has(e,r)))];
   const pend=Object.keys(EN).reduce((s,k)=>s+(D[k]||[]).filter(x=>x.e&&x.a&&x.ok!==true&&x.ok!==false).length,0);
@@ -1822,6 +1921,10 @@ document.addEventListener('change',e=>{
     Promise.all(fs.map(shrinkShot)).then(L=>{if(S.edit?.kind!=='rep')return;X.imgs.push(...L);repSheet()}).catch(()=>toast('ماقدرتش أقرا الصورة'));return}
   if(t.id==='b_file'&&t.files&&t.files[0]){document.getElementById('b_prev').innerHTML='<span class="small muted">بيجهّز اللوجو…</span>';shrinkLogo(t.files[0]).then(d=>{if(S.edit?.kind!=='brand')return;S.edit.img=d;document.getElementById('b_prev').innerHTML=`<img src="${d}" alt="" style="max-height:140px;background:#fff;border-radius:10px;padding:6px">`}).catch(()=>toast('الصورة دي مش راضية تفتح، جرّب صورة تانية'));return}
   if(t.id==='w_file'&&t.files&&t.files[0]){const f=t.files[0];document.getElementById('w_prev').innerHTML='<span class="small muted">بيجهّز الصورة…</span>';shrinkImage(f).then(d=>{if(S.edit?.kind!=='work')return;S.edit.img=d;document.getElementById('w_prev').innerHTML=`<img src="${d}" alt="" style="max-height:220px;border-radius:10px">`}).catch(()=>toast('الصورة دي مش راضية تفتح، جرّب صورة تانية'));return}
+  if(t.id==='rq_c'){rqRead();S.edit.to=rqDefTo(S.edit.type,S.edit.cid);sheetReqNew();return}
+  if(t.id==='rq_files'){rqRead();S.edit.files=[...t.files].slice(0,20);sheetReqNew();return}
+  if(t.id==='rqd_files'){rqdRead();S.edit.files=[...t.files].slice(0,20);sheetReq(S.edit.id);return}
+  if(t.id==='rqAcc'){S.rqA=t.value;render();return}
   if(t.id==='fr_c'){document.getElementById('fr_xw').hidden=t.value!=='__ext';if(t.value==='__ext')document.getElementById('fr_xn').focus()}
   if(/^fr_se_/.test(t.id||'')){frCalc();if(t.value==='__ext')document.getElementById('fr_sx_'+t.id.slice(6))?.focus()}
   if(t.dataset.dist){readDist(t.dataset.dist)}
@@ -1999,6 +2102,34 @@ document.addEventListener('click',async e=>{
     const list=[...(S.myAsks||[]),{id:uid(),t:t.slice(0,600),at:Date.now(),done:false}].slice(-30);
     if(await save(()=>db.doc('asks/'+S.me.id).set({emp:S.me.id,name:S.me.name||'',list}),'اتبعتت للإدارة والتيم ليدر ✓')){S.myAsks=list;document.getElementById('ask_t').value='';pushAsk(t)}b.disabled=false;return}
   if(a==='msgSeen'){if(!S.me||!S.myTask)return;b.disabled=true;S.myTask={...S.myTask,msgSeen:true};if(!await save(()=>db.doc('tasks/'+S.me.id+'_'+today()).update({msgSeen:true}),'تمام ✓'))b.disabled=false;render();return}
+  if(a==='rqOpen')return sheetReq(b.dataset.id);
+  if(a==='rqBoard')return sheetBoard(b.dataset.c,b.dataset.n);
+  if(a==='rqNew'){S.edit=null;return sheetReqNew(b.dataset.c)}
+  if(a==='rqType'){rqRead();const E=S.edit;E.type=b.dataset.k;E.to=rqDefTo(E.type,E.cid);return sheetReqNew()}
+  if(a==='rqF'){S.rqF=b.dataset.k;render();return}
+  if(a==='rqSave'){rqRead();const E=S.edit,lead=isLead();if(!E.cid)return toast('اختار الأكونت');if(!E.to)return toast('اختار مطلوب من مين');if(!E.title&&!E.desc)return toast('اكتب المطلوب');
+    const to=rqPerson(E.to),cname=cli(E.cid)?.name||myCrAccs().find(a=>a.cid===E.cid)?.name||'',me=S.me,A=S.asg?.[E.cid];
+    const crE=lead&&A?(A.creator||[]).map(x=>rqPerson(x.e)?.email).filter(Boolean):[];
+    const see=[...new Set([meEmail(),to?.email,...crE].filter(Boolean))];
+    const ref=db.collection('reqs').doc(),TS=firebase.firestore.FieldValue.serverTimestamp();
+    const d={cid:E.cid,cname,month:today().slice(0,7),type:E.type,title:E.title.slice(0,120),desc:E.desc.slice(0,2000),to:E.to,toName:to?.name||'',toEmail:to?.email||'',by:me?.id||'',byName:me?.name||(S.fin?'الإدارة':'التيم ليدر'),byEmail:meEmail(),
+      due:E.due,refs:[],links:splitLinks(E.links),status:lead?'todo':'pending',see,at:TS,...(E.type==='video'?{n:Math.max(1,+E.n||1)}:{}),...(E.type==='ads'?{amt:+E.amt||0}:{}),...(lead?{apBy:me?.name||'الإدارة'}:{})};
+    E.busy=true;sheetReqNew();
+    try{await ref.set(d);if(E.files.length){const up=await rqUpload(ref.id,E.files,p=>{const el=document.querySelector('[data-act=rqSave]');if(el)el.textContent=p});await ref.update({refs:up,upAt:TS})}
+      if(lead)await rqToTask({...d,id:ref.id});rqPush(ref.id,lead?'todo':'new');toast(lead?'الطلب اتبعت واتحول مهمة ✓':'الطلب اتبعت للموافقة ✓');S.edit=null;closeSheet()}
+    catch(e){console.warn(e);E.busy=false;E.prog='';toast('الطلب ماتبعتش، جرّب تاني');sheetReqNew()}return}
+  if(a==='rqApprove'||a==='rqReject'||a==='rqDone'||a==='rqChanges'){const r=(S.reqs||[]).find(x=>x.id===S.edit?.id);if(!r)return;const nm=S.me?.name||(S.fin?'الإدارة':'التيم ليدر');b.disabled=true;
+    let ok=false;
+    if(a==='rqApprove')ok=await save(async()=>{await db.doc('reqs/'+r.id).update({status:'todo',apBy:nm});await rqToTask(r)},'اتوافق واتحول مهمة ✓');
+    if(a==='rqReject')ok=await save(()=>db.doc('reqs/'+r.id).update({status:'rejected',apBy:nm}),'اترفض');
+    if(a==='rqDone')ok=await save(async()=>{await db.doc('reqs/'+r.id).update({status:'done',doneDay:today(),apBy:nm});await rqToAtt(r);await rqMarkTask(r,{done:true,ok:true})},'تم ✓ واتسجّل في المتابعة اليومية');
+    if(a==='rqChanges'){const note=v('rq_rev');if(!note){b.disabled=false;return toast('اكتب التعديل المطلوب')}ok=await save(async()=>{await db.doc('reqs/'+r.id).update({status:'changes',rev:note});await rqToTask(r,today(),'تعديل: ')},'التعديل اتبعت')}
+    if(ok){rqPush(r.id,{rqApprove:'todo',rqDone:'done',rqChanges:'changes'}[a]||'');closeSheet()}else b.disabled=false;return}
+  if(a==='rqDeliver'){const r=(S.reqs||[]).find(x=>x.id===S.edit?.id),E=S.edit;if(!r)return;rqdRead();const links=splitLinks(E.links);if(!E.files.length&&!links.length)return toast('ارفع الشغل أو حط لينكه');
+    E.busy=true;b.disabled=true;try{const up=E.files.length?await rqUpload(r.id,E.files,p=>{const el=b;if(el)el.textContent=p}):[];
+      await db.doc('reqs/'+r.id).update({deliver:[...(r.deliver||[]),...up],dLinks:[...new Set([...(r.dLinks||[]),...links])],dNote:E.note||'',status:'review',upAt:firebase.firestore.FieldValue.serverTimestamp()});
+      rqMarkTask(r,{done:true}).catch(err);rqPush(r.id,'review');toast('اتسلّم ✓ ومستني المراجعة');S.edit=null;closeSheet()}
+    catch(e){console.warn(e);E.busy=false;toast('الرفع ماكملش، جرّب تاني');sheetReq(r.id)}return}
   if(a==='ofOpen')return sheetOffer(b.dataset.id);
   if(a==='ofAll'){S.ofAll=!S.ofAll;render();return}
   if(a==='scAll'){S.scAll=!S.scAll;render();return}
@@ -2054,6 +2185,7 @@ document.addEventListener('click',async e=>{
   if(a==='delAsk'){document.getElementById('delZone').innerHTML=`<div class="notice row between"><span>${/^client/.test(b.dataset.what)?'العميل هيتمسح بالكامل: فواتيره وتوزيعه وخططه والبريف. متأكد؟':'المسح نهائي. متأكد؟'}</span><div class="row"><button class="btn sm danger" data-act="delYes" data-what="${b.dataset.what}">أيوه امسح</button><button class="btn sm" data-act="delNo">لأ</button></div></div>`;return}
   if(a==='delNo'){document.getElementById('delZone').innerHTML='';return}
   if(a==='delYes'&&(b.dataset.what==='clientR'||b.dataset.what==='client')){b.disabled=true;if(await save(()=>purgeClient(b.dataset.what==='client'?S.edit.id:S.edit.clientId),'العميل اتمسح بالكامل'))closeSheet();else b.disabled=false;return}
+  if(a==='delYes'&&b.dataset.what==='req'){const r=(S.reqs||[]).find(x=>x.id===S.edit?.id);if(r&&await save(async()=>{if(isLead())for(const f of [...(r.refs||[]),...(r.deliver||[])])if(f.path)await firebase.storage().ref(f.path).delete().catch(()=>{});await db.doc('reqs/'+r.id).delete()},'الطلب اتمسح'))closeSheet();return}
   if(a==='delYes'&&b.dataset.what==='sitechat'){const cid=S.edit.id;if(await save(async()=>{const m=await db.collection('siteChats/'+cid+'/msgs').get();const bt=db.batch();m.docs.forEach(d=>bt.delete(d.ref));bt.delete(db.doc('siteChats/'+cid));await bt.commit()},'اتمسحت'))closeSheet();return}
   if(a==='delYes'){const w=b.dataset.what,ref=w==='brand'?db.doc('site/main/brands/'+S.edit.id):w==='free'?db.doc('fin/main/freelance/'+S.edit.id):w==='offer'?db.doc('offers/'+S.edit.id):w==='svc'?db.doc('site/main/services/'+S.edit.id):w==='work'?db.doc('site/main/works/'+S.edit.id):w==='client'?db.doc('clients/'+S.edit.id):w==='emp'?db.doc('employees/'+S.edit.id):db.doc('fin/main').collection('invoices').doc(S.edit.id);if(await save(()=>ref.delete(),'اتمسح'))closeSheet();return}
   if(a==='attS'){const r=(S.attDraft.rows[b.dataset.e]??={s:'present'});r.s=b.dataset.s;if(r.s==='present')r.cover=null;render();return}
@@ -2105,7 +2237,7 @@ document.addEventListener('click',async e=>{
       for(const k of Object.keys(EN))for(const x of body[k])if(x.e===e.id){const t=taskLabel(k,x);items.push({id:x.id,k,t,done:!!was(x.id,t)?.done,...(x.note?{note:x.note}:{}),...(x.link?{link:x.link}:{}),...(x.ok!=null?{ok:x.ok}:{}),...(x.by?{byEmp:emp(x.by)?.name||''}:{}),...(x.why?{why:x.why}:{})})}
       for(const x of body.shoots||[]){const c=clName(x.a);if(x.dir===e.id&&x.dir!==x.e)items.push({id:x.id+'_d',k:'sd',t:`إخراج · ${c}`,done:!!was(x.id+'_d')?.done});
         if(x.ed===e.id)items.push({id:x.id+'_m',k:'se',t:`مونتاج · ${c}${x.n?' · '+x.n+' فيديو':''}`,done:!!was(x.id+'_m')?.done})}
-      for(const x of oldIt)if(x.k==='mt'&&!items.some(y=>y.id===x.id))items.push(x);
+      for(const x of oldIt)if((x.k==='mt'||x.k==='rq')&&!items.some(y=>y.id===x.id))items.push(x);
       const X=D.extra[e.id]??xtraOf(e.id);X.t.split('\n').map(z=>z.trim()).filter(Boolean).forEach(t=>{const id='x'+hashStr(t);items.push({id,k:'x',t,done:!!was(id,t)?.done})});
       const msg=(X.msg||'').trim();if(!old&&!items.length&&!msg)continue;
       if(old&&JSON.stringify(oldIt)===JSON.stringify(items)&&(old.msg||'')===msg)continue;

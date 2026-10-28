@@ -26,6 +26,17 @@ service cloud.firestore {
     match /fin/main/freelance/{id} { allow read, write: if isTL(); }
     // العملاء الخارجيين (شغل فريلانس لعميل مش من عملاء الشركة)
     match /extClients/{id}  { allow read, write: if isTL(); }
+    // طلبات الأكونتات: اللي في القايمة (الطالب، والمطلوب منه، وكريتورز الأكونت) بس اللي يشوفوا الطلب
+    match /reqs/{id} {
+      allow read: if isTL() || (signedIn() && myEmail() in resource.data.see);
+      allow create: if isTL() || (inTeam() && request.resource.data.byEmail == myEmail() && myEmail() in request.resource.data.see && request.resource.data.status == 'pending');
+      allow update: if isTL() || (signedIn() && myEmail() in resource.data.see && (
+                       (myEmail() == resource.data.toEmail && resource.data.status in ['todo','changes'] && request.resource.data.status == 'review'
+                         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deliver','dLinks','dNote','status','upAt']))
+                    || (myEmail() == resource.data.byEmail && resource.data.status == 'pending' && request.resource.data.status == 'pending'
+                         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['refs','links','upAt']))));
+      allow delete: if isTL() || (signedIn() && myEmail() == resource.data.byEmail && resource.data.status == 'pending');
+    }
     // عروض «فصّل باقتك» من الموقع: أي حد يبعت عرض، واللي معاه لينك العرض (الـ id) بس اللي يفتحه
     match /offers/{id} {
       allow get: if true;
