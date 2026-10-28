@@ -89,7 +89,7 @@ service cloud.firestore {
     match /tasks/{id}       { allow read: if resource == null || isTL() || isEmp(resource.data.emp);
                               allow create, delete: if isTL();
                               allow update: if isTL() || (isEmp(resource.data.emp)
-                                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['items','msgSeen'])); }
+                                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['items','msgSeen','msgReply'])); }
     // التقييم: التيم ليدر بيكتب تقييمه بس، والمدير بيكتب الاتنين
     match /ratings/{id}     { allow read: if isTL();
                               allow write: if isOwner() || (isTL() && id.matches('.*_tl')); }
