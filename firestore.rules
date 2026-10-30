@@ -50,15 +50,22 @@ service cloud.firestore {
     match /crate/{id}       { allow read: if isTL() || isClientOf(resource.data.cid);
                               allow create, update: if isClientOf(request.resource.data.cid) && request.resource.data.keys().hasOnly(['cid','month','stars','note','at']);
                               allow update: if isTL(); }
+    // توزيع مهام كل يوم (التيم ليدر بيأكده) ومتابعته كل ساعتين
+    match /dist/{d}         { allow read: if signedIn(); allow write: if isTL(); }
+    match /dfol/{d}         { allow read, write: if isTL(); }
     // طلبات الأكونتات: اللي في القايمة (الطالب، والمطلوب منه، وكريتورز الأكونت) بس اللي يشوفوا الطلب
     match /reqs/{id} {
       allow read: if isTL() || (signedIn() && myEmail() in resource.data.see);
       allow create: if isTL() || (inTeam() && request.resource.data.byEmail == myEmail() && myEmail() in request.resource.data.see && request.resource.data.status == 'pending');
       allow update: if isTL() || (signedIn() && myEmail() in resource.data.see && (
                        (myEmail() == resource.data.toEmail && resource.data.status in ['todo','changes'] && request.resource.data.status == 'review'
-                         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deliver','dLinks','dNote','dCap','status','upAt']))
+                         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deliver','dLinks','dNote','dCap','dlvAt','status','upAt']))
                     || (myEmail() == resource.data.byEmail && resource.data.status == 'pending' && request.resource.data.status == 'pending'
                          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['refs','links','upAt']))
+                    || (myEmail() == resource.data.toEmail && resource.data.status in ['todo','changes'] && request.resource.data.status == resource.data.status
+                         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['dlvAt']))
+                    || (myEmail() == resource.data.toEmail && resource.data.get('type', '') == 'mod' && resource.data.status == 'todo' && request.resource.data.status == 'done'
+                         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','dlvAt','doneDay']))
                     || (myEmail() == resource.data.get('sendEmail', '') && resource.data.get('sendPend', false) == true && request.resource.data.sendPend == false
                          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sendPend','sentC','sentAt']))));
       allow delete: if isTL() || (signedIn() && myEmail() == resource.data.byEmail && resource.data.status == 'pending');

@@ -130,7 +130,8 @@ h4{font-size:14px;margin:0;font-weight:600}
 .demo{font-size:11px;background:var(--gold-soft);color:var(--gold);padding:1px 7px;border-radius:6px;margin-inline-start:6px}
 .bar{display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--bg)}
 .bar i{display:block;height:100%}
-.biz-h h2{margin:0;font-size:28px}.cw{border:1px solid var(--line);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:8px;background:var(--surface)}.cw .cap{white-space:pre-wrap;overflow-wrap:anywhere;font-size:15px}.biz-st{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}.biz-st div{background:var(--bg);border-radius:12px;padding:10px;text-align:center;display:flex;flex-direction:column}.biz-st b{font-family:var(--display);font-size:26px;color:var(--ink-strong)}.biz-st span{font-size:13px;color:var(--muted)}
+.biz-h h2{margin:0;font-size:28px}.cw{border:1px solid var(--line);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:8px;background:var(--surface)}.cw .cap{white-space:pre-wrap;overflow-wrap:anywhere;font-size:15px}.biz-pl{display:flex;flex-wrap:wrap;gap:14px;justify-content:center;padding:6px 0 4px}.biz-pl a{display:flex;flex-direction:column;align-items:center;gap:4px;text-decoration:none;color:var(--ink-2,inherit);font-size:11px;width:64px}.biz-pl svg{width:44px;height:44px;display:block;filter:drop-shadow(0 2px 4px rgba(0,0,0,.12))}.biz-pl a:active svg{transform:scale(.94)}
+.biz-st{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}.biz-st div{background:var(--bg);border-radius:12px;padding:10px;text-align:center;display:flex;flex-direction:column}.biz-st b{font-family:var(--display);font-size:26px;color:var(--ink-strong)}.biz-st span{font-size:13px;color:var(--muted)}
 .bellbar{display:flex;justify-content:flex-end;margin-bottom:-6px}.bell{position:relative;width:42px;height:42px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--ink);display:grid;place-items:center;cursor:pointer}.bell svg{width:22px;height:22px}.bell i{position:absolute;top:-3px;inset-inline-start:-3px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:var(--accent);color:#fff;font:700 11px/18px var(--body);font-style:normal;text-align:center}.bell-list .bell-it{width:100%;border:0;background:none;font:inherit;color:inherit;cursor:pointer;padding:10px 4px}.bell-list .bell-it.new{background:var(--accent-soft);border-radius:10px;padding:10px 8px}
 .rq-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}.rq-th{display:block;position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--bg);border:1px solid var(--line);text-decoration:none;color:var(--ink)}.rq-th img{width:100%;height:100%;object-fit:cover}.rq-th span{display:grid;place-items:center;height:100%;padding:6px;font-size:12px;text-align:center;overflow-wrap:anywhere}.rq-th i{position:absolute;inset-inline:0;bottom:0;font-style:normal;font-size:11px;padding:2px 6px;background:rgba(0,0,0,.55);color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .att-nav{position:sticky;top:var(--navH,0px);z-index:5;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:8px 0;margin:-4px 0;background:var(--bg)}.att-nav::-webkit-scrollbar{display:none}.att-nav .chip{flex:none}[id^=sec_]{scroll-margin-top:150px}
@@ -389,7 +390,7 @@ async function start(u){
   mainEl().innerHTML='<div class="empty"><h3>بيحمّل…</h3></div>';
   db.doc('cfg/settings').onSnapshot(s=>{if(s.exists)S.cfg={...S.cfg,...s.data()};subscribePush();rr()},err);
   if(S.mode==='client'){if(/^#(chat-|call)/.test(location.hash))S.pendingHash=location.hash;startClient();return}
-  reqsSub();bizSubLead();cwMineSub();if(location.hash==='#reqs'&&(own||tl))S.tab='me';
+  reqsSub();bizSubLead();cwMineSub();distSub();if(location.hash==='#reqs'&&(own||tl))S.tab='me';
   if(/^#(chat-|call)/.test(location.hash))S.pendingHash=location.hash;
   if(location.hash==='#me'&&S.mode==='app')S.tab='me';if(location.hash==='#site'&&own)S.tab='site';
   const empQ=S.mode==='app'?db.collection('employees'):db.collection('employees').where('email','==',S.email);
@@ -542,6 +543,7 @@ function compute(){
       if(dlt){const rate=pL.reduce((a,l)=>a+l.share/(l.target||15),0)/pL.length,cur=pL.reduce((a,l)=>a+l.amt,0),cap=[...new Map(pL.map(l=>[l.client+l.kind,l.share])).values()].reduce((a,x)=>a+x,0);
         const amt=Math.max(-cur,Math.min(cap-cur,dlt*rate));if(Math.abs(amt)>0.5)add(id,amt,{type:'sumadj',what:`${dlt>0?'بوستات زيادة':'بوستات أقل'} من ملخص الشهر (${Math.abs(dlt)})`})}}
     for(const[d,x]of Object.entries(S.checks?.[id]||{})){if(latePer<=0||!d.startsWith(S.month)||off.has(d)||!x.in||x.in<=grace||isFri(d))continue;(lates[id]??=[]).push(d);add(id,-latePer*lf,{type:'late',date:d,t:x.in})}
+    {const dv=allEl/md,pc=(+DLS().pct||0)/100;if(dv>0&&pc>0)for(const T of taskLates(id))add(id,-dv*Math.min(1,T.h*pc),{type:'tlate',what:T.what,h:T.h,date:T.date})}
     // التيم ليدر: أي يوم شغل عدّى من غير «إنهاء اليوم» قبل 11:59 بالليل بيتخصم يوم
     if(isTLx&&per>0){const AMw=attModel().work;for(const d of AMw){if(d>=today()||isFri(d)||off.has(d)||closedOk(d))continue;add(id,-per,{type:'noclose',date:d})}}
   }
@@ -570,8 +572,8 @@ function recPreview(r){
 }
 
 /* ---------- render ---------- */
-const TABS_FIN=[['home','الشهر'],['acc','العملاء'],['brief','الأكونتات'],['dist','التوزيع'],['att','المتابعة اليومية'],['today','مهام اليوم'],['free','فريلانس'],['pay','المرتبات'],['star','نجم الشهر'],['team','الفريق'],['site','الموقع'],['set','الإعدادات']];
-const TABS_TL=[['att','المتابعة اليومية'],['today','مهام اليوم'],['brief','الأكونتات'],['dist','التوزيع'],['free','فريلانس']];
+const TABS_FIN=[['home','الشهر'],['acc','العملاء'],['brief','الأكونتات'],['dist','التوزيع'],['att','المهام والمتابعة'],['today','مهام اليوم'],['free','فريلانس'],['pay','المرتبات'],['star','نجم الشهر'],['team','الفريق'],['site','الموقع'],['set','الإعدادات']];
+const TABS_TL=[['att','المهام والمتابعة'],['today','مهام اليوم'],['brief','الأكونتات'],['dist','التوزيع'],['free','فريلانس']];
 // بيانات صفحة العملاء (فيها صور تقيلة) بتتحمّل بس لما تفتح تبويب «الموقع»
 function ensureSite(){if(S.siteSub||!S.fin)return;S.siteSub=1;
   db.doc('site/main').onSnapshot(s=>{S.site=s.exists?s.data():{};rr()},err);
@@ -647,7 +649,7 @@ function autoPlan(X,m){const days=monDays(m).filter(d=>!isFri(d)),q=X.q||{},item
   days.filter(d=>!busy(d)).forEach(d=>put(d,'ستوري'));
   return items}
 // المتابعة اليومية بتتعلّم لوحدها من الخطة (لليوم اللي لسه ماتحفظش)
-function planFill(D,d){const m=d.slice(0,7);let n=0;for(const P of Object.values(S.plans||{})){if(P.month!==m)continue;const its=P.items?.[d]||[];if(!its.length)continue;const A=S.asg?.[P.cid];if(!A)continue;
+function planFill(D,d){const m=d.slice(0,7);let n=0;for(const P of Object.values(S.plans||{})){if(P.month!==m||P.tk)continue;const its=P.items?.[d]||[];if(!its.length)continue;const A=S.asg?.[P.cid];if(!A)continue;
   const day=+d.slice(8),segs=[...(A.creator||[])].sort((a,b)=>(+a.from||1)-(+b.from||1)),cr=(segs.filter(x=>(+x.from||1)<=day).pop()||segs[0])?.e,dg=segAt(dSegs(A),day)?.e;
   for(const it of its){const ct=['ديزاين','كيرزل','بوست'].includes(it.t)?'بوست':it.t;if(cr&&PS_T.includes(ct)&&!D.posts.some(x=>x.e===cr&&x.a===P.cid&&x.t===ct&&x.cv==null&&x.idea===it.idea)){D.posts.push({e:cr,a:P.cid,t:ct,...(it.idea?{idea:it.idea}:{})});n++}
     const dt=it.t==='كيرزل'?'كيرزل':['ديزاين','بوست'].includes(it.t)?'ديزاين':it.t==='ريالتي'?'تحسين':null;if(dg&&dt&&!D.designs.some(x=>x.e===dg&&x.a===P.cid&&x.t===dt&&x.cv==null)){D.designs.push({e:dg,a:P.cid,t:dt,...(it.idea?{idea:it.idea}:{})});n++}}}
@@ -683,14 +685,16 @@ function planSheet(){const E=S.edit,X=E.data,R0=E.raw,sent=R0?.status==='sent',s
     <div class="small muted" style="margin-top:6px">دوس على أي يوم علشان تضيف أو تغيّر أو تكتب الفكرة.</div>${dayEd}</div>
    <div class="panel stack" style="gap:10px"><h3>فورم الخطة</h3>${PLAN_Q.map(([k,l])=>`<div class="field"><label class="label" for="pf_${k}">${l}</label><textarea id="pf_${k}" rows="2" ${ed?'':'disabled'}>${h(X.form[k]||'')}</textarea></div>`).join('')}</div>
    ${ed?`<div class="row"><button class="btn" data-act="plSave" data-s="draft">حفظ</button><button class="btn primary" data-act="plSave" data-s="sent">${sent?'حفظ التعديل':'تسليم الخطة'}</button></div>`:''}
-   ${E.lead?`<div class="panel stack" style="gap:8px"><h3>تقييم الخطة</h3><div class="row">${stars('pl_rate',X.rating)}<button class="btn sm" data-act="plRate">حفظ التقييم</button></div><div class="row"><a class="btn good" target="_blank" rel="noopener" href="https://wa.me/${waPhone(S.briefs?.[E.cid]?.phone||cli(E.cid)?.phone)}?text=${encodeURIComponent(planText(E))}">إرسال للعميل واتساب</a><button class="btn" data-act="plPdf">PDF</button></div></div>`:''}
+   ${E.lead?`<div class="panel stack" style="gap:8px;border-color:var(--accent)"><h3>اعتماد الخطة</h3>${R0?.tk?`<div class="small">${R0.apSig&&R0.apSig!==plSig(X.items)?'<span style="color:var(--gold)">⚠️ الخطة اتعدلت بعد الاعتماد. اعتمدها تاني علشان المهام تتحدث.</span>':'<span style="color:var(--good)">✓ معتمدة والمهام اتوزعت'+(R0.apBy?' · '+h(R0.apBy):'')+'</span>'}</div>`:'<div class="small muted">لما تعتمد الخطة: كل بوست وستوري وريل بيبقى مهمة للكريتور في يومها، والموديريتور عليه متابعة الكومنتس والرسايل كل يوم.</div>'}<button class="btn primary" data-act="plAp" style="justify-content:center">✅ ${R0?.tk?'اعتمد التعديل وحدّث المهام':'اعتمد الخطة ووزّع المهام'}</button></div><div class="panel stack" style="gap:8px"><h3>تقييم الخطة</h3><div class="row">${stars('pl_rate',X.rating)}<button class="btn sm" data-act="plRate">حفظ التقييم</button></div><div class="row"><a class="btn good" target="_blank" rel="noopener" href="https://wa.me/${waPhone(S.briefs?.[E.cid]?.phone||cli(E.cid)?.phone)}?text=${encodeURIComponent(planText(E))}">إرسال للعميل واتساب</a><button class="btn" data-act="plPdf">PDF</button></div></div>`:''}
    <div style="position:absolute;left:-9999px;top:0;width:420px">${planPaper(E)}</div></div>`)}
 const planText=E=>{const X=E.data,L=monDays(E.m).filter(d=>(X.items[d]||[]).length);return `خطة ${mName(E.m)} · ${E.name}\nمن ${S.cfg.company||'Pensell'}\n\n`+(X.form.goal?`*الهدف:* ${X.form.goal}\n`:'')+(X.form.offers?`*العروض:* ${X.form.offers}\n`:'')+'\n'+L.map(d=>`${dLong(d)}: ${(X.items[d]||[]).map(i=>plN(i.t)+(i.idea?' ('+i.idea+')':'')).join('، ')}`).join('\n')};
 const planPaper=E=>{const X=E.data,L=monDays(E.m).filter(d=>(X.items[d]||[]).length);return `<div class="paper" id="planPaper">${paperHead('خطة الشهر',`<b>${h(E.name)}</b><br>${mName(E.m)}`)}<div class="paper-b">
   ${PLAN_Q.filter(([k])=>X.form[k]).map(([k,l])=>`<div style="padding:8px 0;border-bottom:1px solid #EEE8E8"><div class="lbl">${l}</div><div style="white-space:pre-wrap;color:#231E1F">${h(X.form[k])}</div></div>`).join('')}
   <table style="margin-top:8px"><tbody>${L.map(d=>`<tr><td style="white-space:nowrap">${dLong(d)}</td><td>${(X.items[d]||[]).map(i=>`<span style="display:inline-block;background:${plC(i.t)};color:#fff;border-radius:6px;padding:1px 6px;font-size:11px;margin:1px">${h(plN(i.t))}</span>${i.idea?' '+h(i.idea):''}`).join('<br>')}</td></tr>`).join('')}</tbody></table></div></div>`};
 /* ---------- البريف وتقرير الشهر ---------- */
-const BRIEF_Q=[['sells','بيبيع إيه؟'],['offers','بيقدّم إيه بالظبط؟ (المنتجات / الخدمات / الأسعار)'],['location','مكانه فين؟ (الفروع / العنوان)'],['target','التارجت بتاعه مين؟'],['adv','ميزاته التنافسية'],['weak','عيوبه ونقاط ضعفه'],['competitors','المنافسين'],['tone','الهوية وطريقة الكلام (الألوان، الستايل، اللهجة)'],['owner','اسم العميل'],['phone','رقم العميل'],['links','لينكات صفحاته'],['insights','الإنسايتس وقت ما خدنا البيدج'],['followers','عدد الفولورز وقت ما خدنا البيدج'],['startDate','تاريخ ما خدنا البيدج'],['notes','ملاحظات تانية']];
+const PLAT=[['fb',/facebook\.com|fb\.com|fb\.me|fb\.watch/i,'فيسبوك'],['ig',/instagram\.com|instagr\.am/i,'انستجرام'],['tt',/tiktok\.com/i,'تيك توك'],['dr',/drive\.google\.com|docs\.google\.com/i,'درايف'],['wa',/chat\.whatsapp\.com|wa\.me|whatsapp\.com/i,'جروب الواتساب'],['web',/./,'الموقع']];
+function linksOf(t){const o={};for(const u of String(t||'').match(/https?:\/\/[^\s،,]+|www\.[^\s،,]+/gi)||[]){const url=/^https?:/i.test(u)?u:'https://'+u;const k=PLAT.find(([,rx])=>rx.test(url))[0];if(!o[k])o[k]=url}return o}
+const BRIEF_Q=[['sells','بيبيع إيه؟'],['offers','بيقدّم إيه بالظبط؟ (المنتجات / الخدمات / الأسعار)'],['location','مكانه فين؟ (الفروع / العنوان)'],['target','التارجت بتاعه مين؟'],['adv','ميزاته التنافسية'],['weak','عيوبه ونقاط ضعفه'],['competitors','المنافسين'],['tone','الهوية وطريقة الكلام (الألوان، الستايل، اللهجة)'],['owner','اسم العميل'],['phone','رقم العميل'],['links','لينكات صفحاته (فيسبوك، انستجرام، تيك توك، الموقع، درايف… كل لينك في سطر)'],['waGroup','لينك جروب الواتساب مع العميل'],['insights','الإنسايتس وقت ما خدنا البيدج'],['followers','عدد الفولورز وقت ما خدنا البيدج'],['startDate','تاريخ ما خدنا البيدج'],['notes','ملاحظات تانية']];
 const REP_N=[['followers','الفولورز آخر الشهر'],['reach','الوصول (Reach)'],['engagement','التفاعل (Engagement)']];
 const REP_Q=[['results','نتايج البيدج الشهر ده'],['best','أحسن محتوى نجح الشهر ده وليه'],['problems','المشاكل اللي واجهتك'],['challenges','التحديات اللي عملتها وإزاي اتعاملت معاها'],['next','اقتراحاتك للشهر الجاي']];
 const monthEnd=m=>{const[y,mo]=m.split('-').map(Number);return m+'-'+String(new Date(y,mo,0).getDate()).padStart(2,'0')};
@@ -738,7 +742,7 @@ const repPaper=(r,cname)=>`<div class="paper" id="repPaper_${r.id}">${paperHead(
   ${REP_Q.filter(([k])=>r.ans?.[k]).map(([k,l])=>`<div style="padding:10px 0;border-bottom:1px solid #EEE8E8"><div class="lbl">${l}</div><div style="white-space:pre-wrap;overflow-wrap:anywhere;color:#231E1F;margin-top:2px">${linkify(r.ans[k])}</div></div>`).join('')}
   ${(r.imgs||[]).map(u=>`<img src="${u}" alt="سكرين الإنسايتس" style="width:100%;border-radius:8px;margin-top:10px;border:1px solid #EEE8E8">`).join('')}</div></div>`;
 const repText=(r,cname)=>`تقرير ${mName(r.month)} · ${cname}\nمن ${S.cfg.company||'Pensell'}\n\n`+REP_N.filter(([k])=>r.nums?.[k]).map(([k,l])=>`• ${l}: ${r.nums[k]}`).join('\n')+'\n\n'+REP_Q.filter(([k])=>r.ans?.[k]).map(([k,l])=>`*${l}*\n${r.ans[k]}`).join('\n\n');
-let briefsSub=0;function ensureBriefs(){if(briefsSub)return;briefsSub=1;db.collection('briefs').onSnapshot(s=>{S.briefs={};s.docs.forEach(d=>S.briefs[d.id]=d.data());rr()},err)}
+let briefsSub=0;function ensureBriefs(){if(briefsSub)return;briefsSub=1;db.collection('briefs').onSnapshot(s=>{S.briefs={};s.docs.forEach(d=>S.briefs[d.id]=d.data());setTimeout(syncClientLinks,300);rr()},err)}
 function vBriefs(){ensureBriefs();const cl=S.clients.filter(c=>c.active!==false),RQ=(S.briefReqs||[]).filter(x=>!x.done);
   if(!cl.length)return `<div class="panel empty"><h3>مفيش أكونتات لسه</h3><p>ضيف العملاء من تبويب «العملاء».</p></div>`;
   return `<div class="stack"><h2>الأكونتات · ${mName(S.month)}</h2>
@@ -847,7 +851,8 @@ function syncClientChats(){if(!S.fin||!S.clients?.length||!S.emps.length)return;
     const emails=[...new Set([...ce,...own,...tl,...team])].sort(),names=Object.fromEntries(ce.map(e=>[e,c.name])),d={title:'Pensell · '+c.name,cid:c.id,client:true,emails,names};
     const j=JSON.stringify(d);if((S.ccJ??={})[c.id]===j)continue;S.ccJ[c.id]=j;db.doc('chats/c_'+c.id).set(d,{merge:true}).catch(err)}}
 // إحصائيات الشهر للعميل (المدير والتيم ليدر بيحدّثوها)
-function syncClientStats(){if(!(S.fin||S.tl)||!S.attLoaded||S.month!==today().slice(0,7))return;const A=ATT(),st={};
+function syncClientLinks(){if(!S.fin&&!S.tl)return;ensureBriefs();if(!S.briefs)return;for(const c of S.clients||[]){if(!cEmails(c).length)continue;const B=S.briefs[c.id]||{},o=linksOf((B.links||'')+'\n'+(B.waGroup||'')),j=JSON.stringify(o);if((S.clJ??={})[c.id]===j)continue;S.clJ[c.id]=j;db.doc('cdocs/'+c.id+'_links').set({cid:c.id,kind:'links',month:'links',links:o}).catch(err)}}
+function syncClientStats(){setTimeout(syncClientLinks,500);if(!(S.fin||S.tl)||!S.attLoaded||S.month!==today().slice(0,7))return;const A=ATT(),st={};
   for(const d of Object.values(A))for(const k of ['posts','shoots','edits','ads'])for(const x of d[k]||[]){if(!x.a)continue;const o=(st[x.a]??={posts:0,stories:0,reels:0,shoots:0,edits:0,ads:[]});
     if(k==='posts'){if(x.t==='ستوري')o.stories++;else if(x.t==='ريل')o.reels++;else if(['بوست','ريالتي'].includes(x.t))o.posts++}
     else if(k==='shoots')o.shoots++;else if(k==='edits')o.edits+=Math.max(1,+x.n||1);else if(k==='ads')o.ads.push(+x.amt||0)}
@@ -873,7 +878,7 @@ const bizAccs=()=>{const seen=new Set();return (S.chats||[]).filter(c=>c.client&
 function bizTeamBox(){const A=bizAccs();if(!A.length)return '';const M=(S.myCw||[]).filter(w=>w.kind==='ask').slice(0,6),sel=S.taC&&A.some(a=>a.cid===S.taC)?S.taC:A[0].cid,nm=id=>A.find(a=>a.cid===id)?.name||'';
   return `<div class="panel stack" style="gap:10px"><h3>العملاء على «بيزنسي»</h3>
    <select id="ta_c" aria-label="الأكونت">${A.map(a=>`<option value="${a.cid}" ${a.cid===sel?'selected':''}>${h(a.name)}</option>`).join('')}</select>
-   <div class="row" style="flex-wrap:wrap"><button class="btn primary" data-act="taAsk">خد رأي العميل / موافقته</button><button class="btn" data-act="cChat">💬 شات العميل</button></div>
+   <div class="row" style="flex-wrap:wrap"><button class="btn primary" data-act="taAsk">خد رأي العميل / موافقته</button><button class="btn" data-act="cChat">💬 شات العميل</button>${isLead()?`<button class="btn" data-act="cRateAsk">⭐ اطلب تقييم الشهر</button>`:''}</div>
    ${M.length?`<div class="list">${M.map(w=>`<div class="item" style="align-items:flex-start"><div class="grow" style="min-width:0"><b>${h(w.title||'سؤال')}</b> <span class="small muted">· ${h(nm(w.cid)||cli(w.cid)?.name||'')}</span>
      <div class="small">${w.status==='pending'?'<span class="muted">مستني رد العميل</span>':w.status==='approved'?'<span style="color:var(--good)">العميل وافق ✓</span>':`<span style="color:var(--gold)">العميل طلب تعديل:</span> ${linkify(w.reply||'')}`}</div></div>
      ${w.status!=='pending'&&!w.handled?`<button class="btn sm" data-act="taSeen" data-id="${w.id}">تمام</button>`:''}</div>`).join('')}</div>`:''}</div>`}
@@ -920,9 +925,15 @@ function startClient(){S.tab='biz';const c=S.cid;
   db.collection('chats').where('emails','array-contains',S.email).onSnapshot(s=>{S.chats=s.docs.map(d=>({id:d.id,...d.data(SNAP)}));S.chatsLoaded=1;syncRooms();onChatsUpdate();rr()},e=>{console.warn(e);S.chatsLoaded=1;rr()});
   db.doc('chatRead/'+S.email).onSnapshot(s=>{S.chatRead=s.exists?s.data().m||{}:{};rr()},err);
   rr()}
+const PLI={fb:'<svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="20" fill="#1877F2"/><path d="M22.4 31V21.6h3.1l.5-3.7h-3.6v-2.3c0-1 .3-1.8 1.8-1.8h1.9v-3.3c-.3 0-1.5-.1-2.8-.1-2.8 0-4.6 1.7-4.6 4.8v2.7h-3.1v3.7h3.1V31z" fill="#fff"/></svg>',
+ ig:'<svg viewBox="0 0 40 40"><defs><linearGradient id="igg" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#FEDA75"/><stop offset=".35" stop-color="#FA7E1E"/><stop offset=".6" stop-color="#D62976"/><stop offset="1" stop-color="#4F5BD5"/></linearGradient></defs><rect width="40" height="40" rx="11" fill="url(#igg)"/><rect x="10" y="10" width="20" height="20" rx="6" fill="none" stroke="#fff" stroke-width="2.4"/><circle cx="20" cy="20" r="4.8" fill="none" stroke="#fff" stroke-width="2.4"/><circle cx="26.2" cy="13.8" r="1.4" fill="#fff"/></svg>',
+ tt:'<svg viewBox="0 0 40 40"><rect width="40" height="40" rx="11" fill="#111"/><path d="M23.5 9.5c.5 3 2.3 4.8 5.2 5v3.6c-1.9 0-3.6-.6-5.2-1.6v7.4a6.6 6.6 0 1 1-6.6-6.6c.4 0 .8 0 1.1.1v3.7a3 3 0 1 0 2 2.8V9.5z" fill="#25F4EE" transform="translate(-1 -1)"/><path d="M23.5 9.5c.5 3 2.3 4.8 5.2 5v3.6c-1.9 0-3.6-.6-5.2-1.6v7.4a6.6 6.6 0 1 1-6.6-6.6c.4 0 .8 0 1.1.1v3.7a3 3 0 1 0 2 2.8V9.5z" fill="#FE2C55" transform="translate(1 1)"/><path d="M23.5 9.5c.5 3 2.3 4.8 5.2 5v3.6c-1.9 0-3.6-.6-5.2-1.6v7.4a6.6 6.6 0 1 1-6.6-6.6c.4 0 .8 0 1.1.1v3.7a3 3 0 1 0 2 2.8V9.5z" fill="#fff"/></svg>',
+ dr:'<svg viewBox="0 0 40 40"><rect width="40" height="40" rx="11" fill="#fff" stroke="#E2E2E2"/><path d="M16.2 9h7.6l8.4 14.5-3.8 6.5z" fill="#FFC107"/><path d="M16.2 9 7.8 23.5l3.8 6.5L20 15.5z" fill="#1FA463"/><path d="M11.6 30h16.8l3.8-6.5H15.4z" fill="#4285F4"/></svg>',
+ wa:'<svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="20" fill="#25D366"/><path d="M20 9.5a10.4 10.4 0 0 0-9 15.6L9.5 30.5l5.5-1.4A10.4 10.4 0 1 0 20 9.5zm6 14.6c-.3.7-1.5 1.4-2.1 1.4-.6.1-1.3.1-2-.2a18 18 0 0 1-1.9-.7 14.6 14.6 0 0 1-5.6-5c-.4-.6-1-1.7-1-3.2s.8-2.3 1.1-2.6c.3-.3.6-.4.8-.4h.6c.2 0 .4 0 .7.5l1 2.4c.1.2.1.4 0 .6l-.4.6-.5.5c-.2.2-.3.3-.1.7.2.3.8 1.3 1.7 2.1 1.2 1 2.1 1.4 2.4 1.5.3.2.5.1.7-.1l.9-1.1c.2-.3.4-.3.7-.2l2.3 1.1c.3.2.6.3.6.4.1.2.1.7-.1 1.3z" fill="#fff"/></svg>',
+ web:'<svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="20" fill="#2F6FDB"/><g fill="none" stroke="#fff" stroke-width="1.8"><circle cx="20" cy="20" r="9.5"/><ellipse cx="20" cy="20" rx="4.3" ry="9.5"/><path d="M10.5 20h19M12 14.5h16M12 25.5h16"/></g></svg>'};
 function vClient(){const W=(S.cw||[]),pend=W.filter(w=>w.status==='pending'),done=W.filter(w=>w.status!=='pending').slice(0,12),R=S.cr||[],st=S.cst,inv=(S.cinv||[]).filter(x=>x.status!=='paid').sort((a,b)=>a.month.localeCompare(b.month));
   const docs=(S.cdocs||[]).filter(d=>d.month===today().slice(0,7)),plan=docs.find(d=>d.kind==='plan'),rep=docs.find(d=>d.kind==='report')||(S.cdocs||[]).filter(d=>d.kind==='report').sort((a,b)=>b.month.localeCompare(a.month))[0];
-  const F=S.crF||{type:'',details:'',link:'',files:[]};const dayN=+today().slice(8),lastWeek=dayN>=24;
+  const F=S.crF||{type:'',details:'',link:'',files:[]};const dayN=+today().slice(8),dimN=new Date(+today().slice(0,4),+today().slice(5,7),0).getDate(),lastWeek=dayN>=dimN-2||(S.cdocs||[]).some(d=>d.kind==='rate'&&d.month===today().slice(0,7)),LK=(S.cdocs||[]).find(d=>d.kind==='links')?.links||{};
   return `<div class="stack biz" style="max-width:620px;margin:0 auto">${bellBar()}
    <div class="biz-h"><div class="small muted">بيزنسي</div><h2>${h(S.cname||'')}</h2></div>
    ${isIOS&&!isStandalone()?`<div class="notice" style="margin:0"><b>علشان توصلك الإشعارات على الآيفون:</b> دوس زرار المشاركة ⬆️ تحت في Safari، واختار «إضافة إلى الشاشة الرئيسية»، وافتح بيزنسي من الأيقونة.</div>`:notifBanner()}
@@ -955,9 +966,10 @@ function vClient(){const W=(S.cw||[]),pend=W.filter(w=>w.status==='pending'),don
      ${(st.ads||[]).length?`<div class="small" style="margin-top:8px">الإعلانات: ${(st.ads||[]).map(a=>money(a)+' ج').join('، ')}</div>`:''}
      <div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap"><span class="pill ${st.plan?'paid':'none'}">خطة الشهر ${st.plan?'خلصت ✓':'لسه'}</span><span class="pill ${st.report?'paid':'none'}">تقرير الشهر ${st.report?'خلص ✓':'لسه'}</span></div>`:'<p class="small muted" style="margin:6px 0 0">الأرقام هتظهر هنا أول ما الشغل يبدأ.</p>'}</div>
    ${lastWeek?`<div class="panel stack" style="gap:8px"><h3>راضي عن شغل الشهر ده؟</h3>${S.crate?`<p class="small" style="margin:0">قيّمت ${'★'.repeat(+S.crate.stars)}${'☆'.repeat(5-S.crate.stars)}، شكرًا لحضرتك.</p>`:`<div class="row" style="gap:4px">${[1,2,3,4,5].map(i=>`<button class="btn sm ${(S.crStars||0)>=i?'primary':''}" data-act="crStar" data-v="${i}" aria-label="${i} من 5">★</button>`).join('')}</div><input id="cr_note" placeholder="ملاحظة (اختياري)"><button class="btn primary" data-act="crRate" ${S.crStars?'':'disabled'}>ابعت التقييم</button>`}</div>`:''}
+   ${Object.keys(LK).length?`<div class="biz-pl" aria-label="صفحاتك">${PLAT.filter(([k])=>LK[k]).map(([k,,nm])=>`<a href="${h(LK[k])}" target="_blank" rel="noopener" title="${nm}" aria-label="${nm}">${PLI[k]}<span>${nm}</span></a>`).join('')}</div>`:''}
    </div>`}
 /* ---------- طلبات الأكونتات: الكريتور بيطلب، المدير أو التيم ليدر بيوافق، والمطلوب منه بيسلّم في نفس المكان ---------- */
-const RQ_T={design:{n:'ديزاين',role:'designer',k:'designs'},video:{n:'فيديو للمونتاج',role:'editor',k:'edits'},ads:{n:'إعلان ممول',role:'mediabuyer',k:'ads'},other:{n:'حاجة تانية',role:null}};
+const RQ_T={design:{n:'ديزاين',role:'designer',k:'designs'},video:{n:'فيديو للمونتاج',role:'editor',k:'edits'},ads:{n:'إعلان ممول',role:'mediabuyer',k:'ads'},other:{n:'حاجة تانية',role:null},pl:{n:'بوست/ستوري للخطة',role:'creator',k:'posts'},mod:{n:'موديريشن',role:'moderator'}};
 const RQ_S={pending:['مستني موافقة','unpaid'],todo:['شغالة','none'],changes:['محتاجة تعديل','red'],review:['مستني مراجعة','unpaid'],done:['خلصت ✓','paid'],rejected:['اترفضت','none']};
 const isLead=()=>!!(S.fin||S.tl);
 const meEmail=()=>String(S.email||'').toLowerCase();
@@ -969,18 +981,18 @@ const tomorrow=()=>{const x=new Date(today()+'T12:00:00Z');x.setUTCDate(x.getUTC
 // أكونتات الكريتور (من التوزيع)
 const myCrAccs=()=>{const m=today().slice(0,7),L=(S.myMine?.byMonth||{})[m]||[],seen=new Set();return L.filter(a=>a.r==='كريتور'&&a.cid&&!seen.has(a.cid)&&seen.add(a.cid)).map(a=>({cid:a.cid,name:a.c,dz:a.dz||''}))};
 function reqsSub(){if(!db||S.unsubRq)return;const q=isLead()?db.collection('reqs'):db.collection('reqs').where('see','array-contains',meEmail());
-  S.unsubRq=q.onSnapshot(s=>{S.reqs=s.docs.map(d=>({id:d.id,...d.data(SNAP)})).sort((a,b)=>(b.at?.toMillis?.()||0)-(a.at?.toMillis?.()||0));if(S.edit?.kind==='req'){const r=S.reqs.find(x=>x.id===S.edit.id),j=JSON.stringify(r||null);if(j!==S.edit.j&&!S.edit.busy){rqdRead();sheetReq(S.edit.id)}}rr()},err)}
+  S.unsubRq=q.onSnapshot(s=>{S.reqs=s.docs.map(d=>({id:d.id,...d.data(SNAP)})).sort((a,b)=>(b.at?.toMillis?.()||0)-(a.at?.toMillis?.()||0));schedSync();if(S.edit?.kind==='req'){const r=S.reqs.find(x=>x.id===S.edit.id),j=JSON.stringify(r||null);if(j!==S.edit.j&&!S.edit.busy){rqdRead();sheetReq(S.edit.id)}}rr()},err)}
 function rqdRead(){const E=S.edit;if(!E||E.kind!=='req')return;const l=document.getElementById('rqd_l'),nn=document.getElementById('rqd_n'),cc=document.getElementById('rqd_c'),sc=document.getElementById('rqs_cap'),sl=document.getElementById('rqs_l');if(l)E.links=l.value;if(nn)E.note=nn.value;if(cc)E.cap=cc.value;if(sc)E.scap=sc.value;if(sl)E.slinks=sl.value}
 const rqPush=(id,ev)=>{if(!auth.currentUser)return;auth.currentUser.getIdToken().then(t=>fetch(pushUrl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'req',idToken:t,id,ev})})).catch(()=>{})};
 const rqCard=r=>{const st=RQ_S[r.status]||RQ_S.pending,to=rqPerson(r.to)?.name||r.toName||'';
-  return `<div class="item" style="align-items:flex-start"><div class="grow" style="min-width:0"><b>${h(r.title||RQ_T[r.type]?.n)}</b> <span class="pill ${st[1]}">${st[0]}</span>${r.sendPend?' <span class="pill unpaid">مستني يتبعت للعميل</span>':''}
+  return `<div class="item" style="align-items:flex-start"><div class="grow" style="min-width:0"><b>${h(r.title||RQ_T[r.type]?.n)}</b> <span class="pill ${st[1]}">${st[0]}</span>${r.sendPend?' <span class="pill unpaid">مستني يتبعت للعميل</span>':''}${dlBadge(r)}${lateBadge(r)}
    <div class="small muted">${h(r.cname||'')} · ${h(RQ_T[r.type]?.n||'')}${to?' · لـ '+h(to):''}${r.due?' · '+rqDay(r.due):''}</div></div><button class="btn sm ${(isLead()&&['pending','review'].includes(r.status))||(r.to===S.me?.id&&['todo','changes'].includes(r.status))?'primary':''}" data-act="rqOpen" data-id="${r.id}">افتح</button></div>`};
 // تبويب «الطلبات» للمدير والتيم ليدر
 function vReqs(){const L=S.reqs||[],f=S.rqF||'act',acc=S.rqA||'';
   const groups={act:['pending','review'],work:['todo','changes'],done:['done'],all:null};
   const cnt=k=>L.filter(r=>!groups[k]||groups[k].includes(r.status)).length;
   const list=L.filter(r=>(!groups[f]||groups[f].includes(r.status))&&(!acc||r.cid===acc));
-  return `<div class="stack"><div class="row between"><h2>الطلبات</h2><button class="btn primary" data-act="rqNew">+ طلب جديد</button></div>
+  return `<div class="stack"><div class="row between"><h2>المهام</h2><button class="btn primary" data-act="rqNew">+ مهمة جديدة</button></div>
    <p class="small muted" style="margin:0">الكريتور بيطلب من الديزاينر أو المونتير أو الميديا باير. لما توافق، الطلب بيتحول مهمة عند اللي مطلوب منه. ولما يسلّم وتوافق على التسليم، بيتعلّم «تم فعلاً» في المتابعة اليومية لوحده.</p>
    <div class="row" style="flex-wrap:wrap;gap:6px"><div class="seg">${[['act','محتاج منك'],['work','شغالة'],['done','خلصت'],['all','الكل']].map(([k,nm])=>`<button class="${f===k?'on p':''}" data-act="rqF" data-k="${k}">${nm} (${cnt(k)})</button>`).join('')}</div>
     <select id="rqAcc" style="width:auto"><option value="">كل الأكونتات</option>${S.clients.filter(c=>c.active!==false).map(c=>`<option value="${c.id}" ${acc===c.id?'selected':''}>${h(c.name)}</option>`).join('')}</select></div>
@@ -995,17 +1007,17 @@ function bellBar(){setTimeout(()=>loadInbox(),0);const L=S.inbox||[],un=L.filter
    ${S.bellOpen?`<div class="panel bell-list"><div class="row between"><h3>آخر الإشعارات</h3><button class="x" data-act="bell" aria-label="قفل">×</button></div>${L.length?`<div class="list" style="margin-top:4px">${L.map((x,i)=>`<button class="item bell-it ${x.at>(S.bellSeen||0)?'new':''}" data-act="bellGo" data-i="${i}"><div class="grow" style="min-width:0;text-align:right"><b>${h(x.t)}</b>${x.b?`<div class="small">${h(x.b)}</div>`:''}<div class="small muted">${agoTxt(x.at)}</div></div></button>`).join('')}</div>`:'<p class="small muted" style="margin:6px 0 0">مفيش إشعارات لسه. أول ما يوصلك إشعار هتلاقيه هنا.</p>'}</div>`:''}`}
 // طلبات التيم للمدير والتيم ليدر: في «صفحتي» وفي المتابعة اليومية
 function leadReqsPanel(){if(!isLead())return '';const L=S.reqs||[],f=S.rqF||'act',G={act:['pending','review'],work:['todo','changes'],done:['done']},list=L.filter(r=>G[f].includes(r.status));
-  return `<div class="panel" id="sec_reqs"><div class="row between"><h3>طلبات التيم</h3><button class="btn sm primary" data-act="rqNew">+ طلب</button></div>
+  return `<div class="panel" id="sec_reqs"><div class="row between"><h3>مهام التيم</h3><button class="btn sm primary" data-act="rqNew">+ مهمة</button></div>
    <div class="seg" style="margin:8px 0">${[['act','محتاج منك'],['work','شغالة'],['done','خلصت']].map(([k,nm])=>`<button class="${f===k?'on p':''}" data-act="rqF" data-k="${k}">${nm} (${L.filter(r=>G[k].includes(r.status)).length})</button>`).join('')}</div>
-   ${list.length?`<div class="list">${list.slice(0,30).map(rqCard).join('')}</div>`:`<p class="small muted" style="margin:0">${f==='act'?'مفيش طلبات مستنياك دلوقتي.':'مفيش طلبات هنا.'}</p>`}</div>`}
+   ${list.length?`<div class="list">${list.slice(0,30).map(rqCard).join('')}</div>`:`<p class="small muted" style="margin:0">${f==='act'?'مفيش حاجة مستنياك دلوقتي.':'مفيش مهام هنا.'}</p>`}</div>`}
 // في «صفحتي»: المطلوب منك، وأكونتاتك (للكريتور)، وطلباتك
 function reqsPanel(){const me=S.me;if(!me)return '';const L=S.reqs||[];
-  const mine=L.filter(r=>(r.to===me.id&&['todo','changes'].includes(r.status))||(r.sendPend&&r.sendTo===me.id)),asked=L.filter(r=>r.by===me.id&&!['done','rejected'].includes(r.status)),accs=has(me,'creator')?myCrAccs():[];
-  if(!mine.length&&!asked.length&&!accs.length)return '';
-  return `<div class="panel stack" style="gap:10px"><div class="row between"><h3>الطلبات</h3>${mine.length?`<span class="pill red">${mine.length} مطلوب منك</span>`:''}</div>
-   ${mine.length?`<div><div class="label" style="margin-bottom:4px">مطلوب منك</div><div class="list">${mine.map(rqCard).join('')}</div></div>`:''}
+  const td=today(),tm=nextWD(td),tmOk=!!S.dists?.[tm],mine=L.filter(r=>(r.to===me.id&&['todo','changes'].includes(r.status)&&(!['pl','mod'].includes(r.type)||r.due<=td))||(r.sendPend&&r.sendTo===me.id)),tmr=tmOk?L.filter(r=>r.to===me.id&&r.due===tm&&['todo','changes'].includes(r.status)):[],asked=L.filter(r=>r.by===me.id&&r.to!==me.id&&!['pl','mod'].includes(r.type)&&!['done','rejected'].includes(r.status)),accs=has(me,'creator')?myCrAccs():[];
+  if(!mine.length&&!asked.length&&!accs.length&&!tmr.length)return '';
+  return `<div class="panel stack" style="gap:10px"><div class="row between"><h3>مهامك</h3>${mine.length?`<span class="pill red">${mine.length} مطلوب منك</span>`:''}</div>
+   ${mine.length?`<div><div class="label" style="margin-bottom:4px">مطلوب منك النهارده</div><div class="list">${mine.sort((a,b)=>(a.dl||9e15)-(b.dl||9e15)).map(rqCard).join('')}</div></div>`:''}${tmr.length?`<div><div class="label" style="margin-bottom:4px">مهام بكره (${rqDay(tm)})</div><div class="list">${tmr.map(rqCard).join('')}</div></div>`:''}
    ${accs.length?`<div><div class="label" style="margin-bottom:6px">لوحة كل أكونت</div><div class="row" style="flex-wrap:wrap;gap:6px">${accs.map(a=>{const n=L.filter(r=>r.cid===a.cid&&!['done','rejected'].includes(r.status)).length;return `<button class="btn sm" data-act="rqBoard" data-c="${a.cid}" data-n="${h(a.name)}">${h(a.name)}${n?` (${n})`:''}</button>`}).join('')}</div></div>`:''}
-   ${asked.length?`<div><div class="label" style="margin-bottom:4px">طلباتك</div><div class="list">${asked.map(rqCard).join('')}</div></div>`:''}</div>`}
+   ${asked.length?`<div><div class="label" style="margin-bottom:4px">اللي طلبته من التيم</div><div class="list">${asked.map(rqCard).join('')}</div></div>`:''}</div>`}
 // لوحة الأكونت: كل طلباته والتسليمات
 function sheetBoard(cid,name){S.edit={kind:'board',cid,name};const L=(S.reqs||[]).filter(r=>r.cid===cid),open=L.filter(r=>!['done','rejected'].includes(r.status)),done=L.filter(r=>r.status==='done');
   openSheet(`<div class="sheet-h"><div><h3>${h(name)}</h3><div class="small muted">لوحة الطلبات</div></div><button class="x" data-act="close" aria-label="قفل">×</button></div><div class="stack">
@@ -1016,12 +1028,13 @@ const isImg=f=>/^image\//.test(f.type||'')||/\.(png|jpe?g|webp|gif)$/i.test(f.na
 const rqThumb=(f,r)=>`<a class="rq-th" href="${h(f.url)}" target="_blank" rel="noopener" title="${h(f.name||'')}">${isImg(f)?`<img src="${h(f.url)}" alt="${h(f.name||'')}" loading="lazy">`:`<span>${h((f.name||'ملف').slice(0,24))}</span>`}${r?`<i>${h(r.title||'')}</i>`:''}</a>`;
 // طلب جديد
 function sheetReqNew(cid){const lead=isLead(),accs=lead?S.clients.filter(c=>c.active!==false).map(c=>({cid:c.id,name:c.name})):myCrAccs();
-  const E=S.edit?.kind==='rqnew'?S.edit:{kind:'rqnew',cid:cid||accs[0]?.cid||'',type:'design',to:'',title:'',desc:'',due:tomorrow(),n:1,amt:'',links:'',files:[]};S.edit=E;
+  const E=S.edit?.kind==='rqnew'?S.edit:{kind:'rqnew',cid:cid||accs[0]?.cid||'',type:'design',sub:'ستوري',to:'',title:'',desc:'',due:tomorrow(),n:1,amt:'',links:'',files:[]};S.edit=E;
   if(!E.to)E.to=rqDefTo(E.type,E.cid);
   const role=RQ_T[E.type].role,P=rqPeople(),pref=role?P.filter(p=>(p.roles||[]).includes(role)):[],rest=P.filter(p=>!pref.includes(p));
-  openSheet(`<div class="sheet-h"><h3>${E.id?'تعديل الطلب':'طلب جديد'}</h3><button class="x" data-act="close" aria-label="قفل">×</button></div><div class="stack">
+  openSheet(`<div class="sheet-h"><h3>${E.id?'تعديل المهمة':'مهمة جديدة'}</h3><button class="x" data-act="close" aria-label="قفل">×</button></div><div class="stack">
    <div class="field"><label class="label" for="rq_c">الأكونت</label><select id="rq_c">${accs.map(a=>`<option value="${a.cid}" ${E.cid===a.cid?'selected':''}>${h(a.name)}</option>`).join('')}</select></div>
-   <div><div class="label" style="margin-bottom:6px">محتاج إيه؟</div><div class="chips">${Object.entries(RQ_T).map(([k,t])=>`<button class="chip ${E.type===k?'on':''}" data-act="rqType" data-k="${k}">${t.n}</button>`).join('')}</div></div>
+   <div><div class="label" style="margin-bottom:6px">محتاج إيه؟</div><div class="chips">${Object.entries(RQ_T).filter(([k])=>k!=='mod').map(([k,t])=>`<button class="chip ${E.type===k?'on':''}" data-act="rqType" data-k="${k}">${t.n}</button>`).join('')}</div></div>
+   ${E.type==='pl'?`<div><div class="label" style="margin-bottom:6px">نوعها في الخطة</div><div class="chips">${PL_T.map(([t,c,,nm])=>`<button class="chip ${(E.sub||'ستوري')===t?'on':''}" data-act="rqSub" data-k="${t}" style="border-color:${c}">${nm}</button>`).join('')}</div><p class="small muted" style="margin:6px 0 0">هتتضاف لخطة الأكونت في اليوم اللي هتختاره تحت.</p></div>`:''}${E.parent?`<div class="notice" style="margin:0">الطلب ده تبع مهمة: ${h((S.reqs||[]).find(r=>r.id===E.parent)?.title||'')}</div>`:''}
    <div class="field"><label class="label" for="rq_to">مطلوب من</label><select id="rq_to"><option value="">اختار</option>${pref.map(p=>`<option value="${p.id}" ${E.to===p.id?'selected':''}>${h(p.name)}</option>`).join('')}${rest.length?`<optgroup label="باقي الفريق">${rest.map(p=>`<option value="${p.id}" ${E.to===p.id?'selected':''}>${h(p.name)}</option>`).join('')}</optgroup>`:''}</select></div>
    <div class="field"><label class="label" for="rq_t">عنوان قصير</label><input id="rq_t" value="${h(E.title)}" placeholder="${E.type==='design'?'مثلاً: بوست عرض الجمعة':E.type==='video'?'مثلاً: ريل افتتاح الفرع':E.type==='ads'?'مثلاً: تمويل بوست العرض':'اكتب المطلوب باختصار'}"></div>
    <div class="field"><label class="label" for="rq_d">التفاصيل</label><textarea id="rq_d" rows="3" placeholder="الكلام اللي على الديزاين، المقاسات، الألوان، أي ملاحظة">${h(E.desc)}</textarea></div>
@@ -1031,8 +1044,9 @@ function sheetReqNew(cid){const lead=isLead(),accs=lead?S.clients.filter(c=>c.ac
    <div class="field"><label class="label">${E.id?'ضيف ريفرنس تاني':'الريفرنس (صور أو ملفات)'}</label><input type="file" id="rq_files" multiple accept="image/*,application/pdf">${E.files.length?`<div class="small muted">${E.files.length} ملف: ${h(E.files.map(f=>f.name).join('، '))}</div>`:''}</div>
    <div class="field"><label class="label" for="rq_l">لينكات (اختياري)</label><textarea id="rq_l" rows="2" dir="ltr" placeholder="لينك درايف للداتا، أو لينك ريفرنس… كل لينك في سطر">${h(E.links)}</textarea></div>
    ${E.prog?`<div class="small">${h(E.prog)}</div>`:''}
-   <button class="btn primary" data-act="rqSave" style="justify-content:center" ${E.busy?'disabled':''}>${E.id?'حفظ التعديل':lead?'ابعت الطلب (بيتحول مهمة على طول)':'ابعت الطلب للموافقة'}</button></div>`)}
+   <button class="btn primary" data-act="rqSave" style="justify-content:center" ${E.busy?'disabled':''}>${E.id?'حفظ التعديل':lead?'ابعت المهمة (بتبدأ على طول)':'ابعت للموافقة'}</button></div>`)}
 function rqDefTo(type,cid){const role=RQ_T[type].role;if(!role)return '';
+  if(type==='pl'){if(S.me&&has(S.me,'creator'))return S.me.id;const A=S.asg?.[cid];return (A?.creator||[]).slice(-1)[0]?.e||''}
   if(type==='design'){if(isLead()){const A=S.asg?.[cid];const d=A?segAt(dSegs(A),+today().slice(8))?.e:'';if(d)return d}else{const a=myCrAccs().find(x=>x.cid===cid);if(a?.dz)return a.dz}}
   const P=rqPeople().filter(p=>(p.roles||[]).includes(role));return P.length===1?P[0].id:''}
 function rqRead(){const E=S.edit;if(!E||E.kind!=='rqnew'||!document.getElementById('rq_t'))return;E.cid=v('rq_c');E.to=v('rq_to');E.title=v('rq_t');E.desc=v('rq_d');E.due=v('rq_due')||tomorrow();E.links=document.getElementById('rq_l').value;if(document.getElementById('rq_n'))E.n=Math.max(1,n('rq_n'));if(document.getElementById('rq_amt'))E.amt=n('rq_amt')}
@@ -1046,6 +1060,88 @@ async function rqUnTask(r){for(const d of [...new Set([r.due,today()].filter(Boo
 async function rqMarkTask(r,patch){for(const d of [...new Set([r.due,today()].filter(Boolean))]){const ref=db.doc('tasks/'+r.to+'_'+d),s=await ref.get();if(!s.exists)continue;const it=s.data().items||[];if(!it.some(i=>i.id==='rq_'+r.id))continue;
     await ref.update({items:it.map(i=>i.id==='rq_'+r.id?{...i,...patch}:i)})}}
 // لما المدير يوافق على التسليم: بيتسجّل «تم فعلاً» في المتابعة اليومية النهارده
+/* ---------- المهام = المتابعة اليومية: الديدلاين، التأخير، توزيع التيم ليدر، ومهام الخطة ---------- */
+const DLS=()=>({cr:'16:00',dz:'20:00',edH:24,mbH:2,w0:'12:00',w1:'20:00',ds:'16:00',de:'18:00',pct:10,since:'',...(S.cfg?.dl||{})});
+const dAt=(d,t)=>new Date(d+'T'+(t||'00:00')+':00').getTime();
+const dStr=ms=>{const z=new Date(ms);return z.getFullYear()+'-'+String(z.getMonth()+1).padStart(2,'0')+'-'+String(z.getDate()).padStart(2,'0')};
+const nextWD=d=>{const x=new Date(d+'T12:00:00Z');do x.setUTCDate(x.getUTCDate()+1);while(x.getUTCDay()===5);return x.toISOString().slice(0,10)};
+const prevWD=d=>{const x=new Date(d+'T12:00:00Z');do x.setUTCDate(x.getUTCDate()-1);while(x.getUTCDay()===5);return x.toISOString().slice(0,10)};
+const hOf=t=>+String(t||'0').split(':')[0]||0;
+// ساعات شغل الميديا باير جوه مواعيد الشغل (12 لـ 8)، واللي يفضل بيكمّل تاني يوم
+function addWork(ms,hrs){const L=DLS();let left=hrs*60,t=ms;for(let g=0;g<40&&left>0.01;g++){let d=dStr(t);if(isFri(d)){d=nextWD(d);t=dAt(d,L.w0)}const a=dAt(d,L.w0),b=dAt(d,L.w1);if(t<a)t=a;if(t>=b){t=dAt(nextWD(d),L.w0);continue}const use=Math.min(left,(b-t)/6e4);t+=use*6e4;left-=use}return t}
+// الديدلاين حسب نوع المهمة: الكريتور ساعة معينة يوم المهمة، الديزاينر 8 بليل، المونتير 24 ساعة، الميديا باير ساعتين شغل
+function calcDL(type,due,from){const L=DLS(),now=from||Date.now(),base=Math.max(now,due?dAt(due,L.w0):0);
+  if(type==='pl')return due?dAt(due,L.cr):null;
+  if(type==='design'){let d=dStr(base);if(isFri(d))d=nextWD(d);let t=dAt(d,L.dz);if(base>=t)t=dAt(nextWD(d),L.dz);return t}
+  if(type==='video')return base+(+L.edH||24)*36e5;
+  if(type==='ads')return addWork(base,+L.mbH||2);
+  return null}
+const OPEN_ST=['todo','changes'];
+// ساعات التأخير: من الديدلاين لحد أول تسليم (أو لحد دلوقتي لو لسه مفتوحة)
+function lateH(r,now){if(!r?.dl||['rejected','pending'].includes(r.status))return 0;const end=r.dlvAt||(OPEN_ST.includes(r.status)?(now||Date.now()):null);if(!end||end<=r.dl)return 0;return Math.ceil((end-r.dl)/36e5)}
+const dlTxt=ms=>{if(!ms)return '';const z=new Date(ms),d=dStr(ms);return (d===today()?'النهارده':d===nextWD(today())?'بكره':rqDay(d))+' '+hm(z)};
+const lateBadge=r=>{const x=lateH(r);return x?` <span class="pill red">متأخرة ${x} س</span>`:''};
+const dlBadge=r=>r.dl&&OPEN_ST.includes(r.status)?` <span class="small ${Date.now()>r.dl?'':'muted'}" style="${Date.now()>r.dl?'color:var(--bad)':''}">⏰ ${dlTxt(r.dl)}</span>`:'';
+// توزيع مهام اليوم D: التيم ليدر بيأكده في اليوم اللي قبله من 4 لـ 6
+const distDL=D=>dAt(prevWD(D),DLS().de);
+const distOpen=D=>dAt(prevWD(D),DLS().ds);
+const distAt=D=>{const x=S.dists?.[D];return x?(x.at?.toMillis?.()||x.atMs||Date.now()):null};
+function distLate(){const L=DLS(),out={};if(!L.since)return out;const lim=nextWD(today());
+  const days=new Set((S.reqs||[]).filter(r=>(r.due||'').startsWith(S.month)&&r.status!=='rejected').map(r=>r.due));
+  for(const D of days){if(D<=L.since||D>lim)continue;const dl=distDL(D),at=distAt(D),end=at||Date.now();if(end<=dl)continue;out[D]=Math.ceil((end-dl)/36e5)}return out}
+// تأخيرات الشهر لكل واحد (بتتخصم في المرتب: نسبة من اليوم لكل ساعة)
+function taskLates(id){const m=S.month,L=[],e=emp(id);
+  for(const r of S.reqs||[]){if(r.to!==id||!(r.due||'').startsWith(m))continue;const x=lateH(r);if(x)L.push({h:x,date:r.due,what:`تأخير ${x} ساعة · ${rqLabel(r)}`})}
+  if(e&&has(e,'teamleader'))for(const[D,x]of Object.entries(distLate()))L.push({h:x,date:D,what:`تأخير ${x} ساعة في توزيع مهام ${rqDay(D)}`});
+  return L}
+function distSub(){if(S.unsubDist||!db)return;const q=isLead()?db.collection('dist'):db.collection('dist').where('d','>=',today());
+  S.unsubDist=q.onSnapshot(s=>{S.dists={};s.docs.forEach(d=>S.dists[d.id]={id:d.id,...d.data(SNAP)});schedSync();rr()},e=>console.warn(e))}
+const plCT=t=>['ديزاين','كيرزل','بوست'].includes(t)?'بوست':t;
+const hid=t=>hashStr(t).slice(1);
+// الخطة ← مهام: بعد ما المدير أو التيم ليدر يعتمد الخطة، كل بوست/ستوري/ريل بيبقى مهمة للكريتور في يومها، والموديريتور عليه متابعة الكومنتس كل يوم
+async function plToTasks(E){const X=E.data,m=E.m,cid=E.cid,A=S.asg?.[cid],c=cli(cid),pid=E.id,me=S.me,nm=me?.name||(S.fin?'الإدارة':'التيم ليدر'),td=today(),TS=firebase.firestore.FieldValue.serverTimestamp();
+  if(!A)throw new Error('noasg');const em=id=>cleanEmail(rqPerson(id)?.email||emp(id)?.email||''),nmOf=id=>emp(id)?.name||rqPerson(id)?.name||'';
+  const segs=[...(A.creator||[])].sort((a,b)=>(+a.from||1)-(+b.from||1)),want={};
+  for(const d of monDays(m)){if(d<td||isFri(d))continue;const day=+d.slice(8),cr=(segs.filter(x=>(+x.from||1)<=day).pop()||segs[0])?.e;
+    for(const it of X.items[d]||[]){if(!cr||it.rq)continue;const id='pl'+m.replace('-','')+hid(pid+'|'+it.id);
+      want[id]={cid,cname:c?.name||'',month:m,type:'pl',sub:it.t,title:plN(it.t)+(it.idea?' · '+it.idea:''),idea:it.idea||'',to:cr,toName:nmOf(cr),toEmail:em(cr),due:d,dl:calcDL('pl',d),pl:pid,pli:it.id}}
+    if(A.moderator){const id='md'+m.replace('-','')+hid(pid+'|'+d);want[id]={cid,cname:c?.name||'',month:m,type:'mod',sub:'',title:'متابعة الكومنتس والرسايل',idea:'',to:A.moderator,toName:nmOf(A.moderator),toEmail:em(A.moderator),due:d,dl:null,pl:pid,pli:''}}}
+  const ex=(S.reqs||[]).filter(r=>r.pl===pid),ops=[];let add=0,upd=0,del=0;
+  for(const[id,w]of Object.entries(want)){const r=ex.find(x=>x.id===id);
+    if(!r){ops.push(b=>b.set(db.doc('reqs/'+id),{...w,by:me?.id||'',byName:nm,byEmail:meEmail(),desc:'',refs:[],links:[],status:'todo',see:[w.toEmail].filter(Boolean),at:TS,apBy:nm}));add++}
+    else if(OPEN_ST.includes(r.status)&&!r.dlvAt){const ch={};for(const k of ['sub','title','idea','to','toName','toEmail','due','dl'])if(JSON.stringify(r[k]??null)!==JSON.stringify(w[k]??null))ch[k]=w[k]??null;
+      if(ch.toEmail)ch.see=[...new Set([...(r.see||[]),w.toEmail].filter(Boolean))];if(Object.keys(ch).length){ops.push(b=>b.update(db.doc('reqs/'+id),ch));upd++}}}
+  for(const r of ex)if(!want[r.id]&&r.due>=td&&r.status==='todo'&&!r.dlvAt){ops.push(b=>b.delete(db.doc('reqs/'+r.id)));del++}
+  for(let i=0;i<ops.length;i+=400){const bt=db.batch();ops.slice(i,i+400).forEach(f=>f(bt));await bt.commit()}
+  return{add,upd,del}}
+const plSig=items=>hashStr(JSON.stringify(Object.keys(items||{}).sort().map(d=>[d,(items[d]||[]).map(i=>[i.id,i.t,i.idea||''])])));
+// لوحة مهام يوم معيّن لكل التيم (للمدير والتيم ليدر)
+function dayBoard(D,opts={}){const L=(S.reqs||[]).filter(r=>r.status!=='rejected'&&(r.due===D||(opts.over&&r.due<D&&OPEN_ST.includes(r.status)&&r.due>=prevWD(prevWD(D)))));
+  if(!L.length)return `<p class="small muted" style="margin:0">مفيش مهام ${D===today()?'النهارده':'لليوم ده'}.</p>`;
+  const by={};L.forEach(r=>(by[r.to||'_']??=[]).push(r));
+  const ord={changes:0,todo:1,pending:2,review:3,done:4};
+  return `<div class="stack" style="gap:8px">${Object.entries(by).sort((a,b)=>(emp(a[0])?.name||'').localeCompare(emp(b[0])?.name||'','ar')).map(([id,rs])=>{const dn=rs.filter(r=>r.status==='done').length,lt=rs.filter(r=>lateH(r)).length;
+    return `<details class="db-p" ${opts.open?'open':''}><summary class="row between" style="cursor:pointer"><b>${h(emp(id)?.name||rs[0].toName||'—')}</b><span class="row" style="gap:4px">${lt?`<span class="pill red">${lt} متأخرة</span>`:''}<span class="pill ${dn===rs.length?'paid':'unpaid'}">${dn} من ${rs.length}</span></span></summary>
+     <div class="list" style="margin-top:6px">${rs.sort((a,b)=>(ord[a.status]??5)-(ord[b.status]??5)).map(r=>`<div class="item" style="align-items:flex-start;padding:6px 0"><div class="grow" style="min-width:0"><span class="small">${h(r.title||RQ_T[r.type]?.n||'')}</span> <span class="small muted">· ${h(r.cname||'')}${r.due!==D?' · من '+rqDay(r.due):''}</span><div><span class="pill ${(RQ_S[r.status]||RQ_S.pending)[1]}">${(RQ_S[r.status]||RQ_S.pending)[0]}</span>${dlBadge(r)}${lateBadge(r)}</div></div><button class="btn xs" data-act="rqOpen" data-id="${r.id}">افتح</button></div>`).join('')}</div></details>`}).join('')}</div>`}
+// مهام التيم ليدر: توزيع بكره، الموافقات، المراجعة، والمتابعة كل ساعتين
+function tlDuty(){if(!isLead())return '';const L=DLS(),tm=nextWD(today()),now=Date.now(),R=S.reqs||[],dn=S.dists?.[tm],o=distOpen(tm),dl=distDL(tm),nT=R.filter(r=>r.due===tm&&r.status!=='rejected').length;
+  const pend=R.filter(r=>r.status==='pending').length,rev=R.filter(r=>r.status==='review').length,late=R.filter(r=>r.due<=today()&&lateH(r)&&OPEN_ST.includes(r.status)).length;
+  const dState=dn?`<span class="pill paid">اتأكد ✓ ${hm(new Date(distAt(tm)))}</span>`:now<o?`<span class="pill none">بيفتح ${L.ds}</span>`:now<=dl?`<span class="pill unpaid">مفتوح لحد ${L.de}</span>`:`<span class="pill red">متأخر ${Math.ceil((now-dl)/36e5)} س · عليه خصم</span>`;
+  return `<div class="panel stack" style="gap:10px;border-color:var(--accent)" id="sec_duty"><h3>مهام التيم ليدر</h3>
+   <div class="item" style="align-items:flex-start"><div class="grow"><b>وزّع مهام ${rqDay(tm)}</b> ${dState}<div class="small muted">${nT} مهمة · من ${L.ds} لـ ${L.de} في اليوم اللي قبلها، وكل ساعة تأخير بعدها عليها خصم ${L.pct}% من اليوم.</div></div><button class="btn sm ${dn?'':'primary'}" data-act="distOpen">${dn?'افتح':'راجع ووزّع'}</button></div>
+   <div class="row" style="flex-wrap:wrap;gap:6px">${pend?`<button class="btn sm" data-act="rqF" data-k="act">✋ ${pend} مستنية موافقتك</button>`:''}${rev?`<button class="btn sm" data-act="rqF" data-k="act">👀 ${rev} مستنية مراجعة</button>`:''}${late?`<span class="pill red">${late} مهمة متأخرة النهارده</span>`:''}</div>
+   <div class="row between"><span class="small muted">تابع التيم كل ساعتين: شوف كل واحد وصل لحد فين في مهام النهارده.</span><button class="btn sm" data-act="tlFollow">تابعت ✓</button></div>
+   <details><summary class="small" style="cursor:pointer;color:var(--accent)">مهام النهارده لكل واحد</summary><div style="margin-top:8px">${dayBoard(today(),{over:true})}</div></details></div>`}
+function sheetDist(){const tm=nextWD(today()),dn=S.dists?.[tm],R=(S.reqs||[]).filter(r=>r.due===tm&&r.status!=='rejected'),L=DLS();S.edit={kind:'dist',d:tm};
+  openSheet(`<div class="sheet-h"><div><h3>توزيع مهام ${rqDay(tm)}</h3><div class="small muted">${R.length} مهمة · راجع مين عليه إيه، وعدّل أي مهمة من «افتح» ← «تعديل»</div></div><button class="x" data-act="close" aria-label="قفل">×</button></div><div class="stack">
+   ${dn?`<div class="notice" style="background:var(--good-soft);margin:0">اتأكد التوزيع الساعة ${hm(new Date(distAt(tm)))}${dn.by?' · '+h(dn.by):''} ✓ والتيم شايف مهام بكره.</div>`:`<div class="notice" style="margin:0">آخر ميعاد ${L.de}. لما تأكد، كل واحد هيوصله إشعار ويشوف مهام بكره في «صفحتي».</div>`}
+   ${dayBoard(tm,{open:true})}
+   <button class="btn ${dn?'':'primary'}" data-act="distOk" style="justify-content:center">${dn?'أكّد تاني وابعت إشعار':'أكّد التوزيع وابعت للتيم ✓'}</button></div>`)}
+// مواعيد التسليم عندك النهارده (بتروح للسيرفر علشان يفكّرك قبلها بساعة)
+function dlRemind(r){if(!r?.dl||!r.toEmail)return;const t=r.dl-36e5;if(t<Date.now())return;const z=new Date(t);schedPush(dStr(t)+'_'+String(z.getHours()).padStart(2,'0'),'dl_'+(r.id||'').slice(0,40),{to:[r.toEmail],title:'⏰ فاضل ساعة على الديدلاين',body:rqLabel(r)})}
+async function plAddItem(d){const id=planId(d.month||d.due.slice(0,7),d.cid),ref=db.doc('plans/'+id),s=await ref.get(),x=s.exists?s.data():{};const items=JSON.parse(JSON.stringify(x.items||{}));(items[d.due]??=[]).push({id:uid(),t:d.sub||'ستوري',idea:d.idea||'',rq:d.id});await ref.set({cid:d.cid,month:d.due.slice(0,7),items},{merge:true})}
+function myDls(){const me=S.me;if(!me)return null;const d=today(),L=(S.reqs||[]).filter(r=>r.to===me.id&&OPEN_ST.includes(r.status)&&r.dl&&dStr(r.dl)===d).map(r=>({h:new Date(r.dl).getHours()-1,t:(r.title||RQ_T[r.type]?.n||'').slice(0,60)+' · '+(r.cname||'')})).filter(x=>x.h>=9).slice(0,12);return{d,L}}
+
 // مين يبعت البوست كامل للعميل: الكريتور اللي طلب، أو كريتور الأكونت
 function rqSender(r){const by=S.emps.find(e=>e.id===r.by);if(by&&has(by,'creator')&&by.email)return by;const A=S.asg?.[r.cid],cr=(A?.creator||[]).slice(-1)[0]?.e,e=S.emps.find(x=>x.id===cr);return e&&e.email?e:null}
 async function rqSendTask(r,eid){const d=today(),ref=db.doc('tasks/'+eid+'_'+d),s=await ref.get(),x=s.exists?s.data():{emp:eid,date:d,items:[],msg:'',byName:'Pensell'},tid='rqs_'+r.id;
@@ -1053,23 +1149,27 @@ async function rqSendTask(r,eid){const d=today(),ref=db.doc('tasks/'+eid+'_'+d),
 async function rqSendDone(r){for(const d of [...new Set([r.doneDay,today()].filter(Boolean))]){const ref=db.doc('tasks/'+r.sendTo+'_'+d),s=await ref.get();if(!s.exists)continue;const it=s.data().items||[];if(it.some(i=>i.id==='rqs_'+r.id))await ref.update({items:it.map(i=>i.id==='rqs_'+r.id?{...i,done:true}:i)})}}
 async function rqToAtt(r){const T=RQ_T[r.type];if(!T.k)return;const d=today(),ref=db.doc('attendance/'+d),s=await ref.get(),x=s.exists?s.data():{date:d,rows:{},auto:true},id='rq_'+r.id;
   const L=(x[T.k]||[]).filter(e=>e.id!==id);
-  L.push(T.k==='designs'?{id,e:r.to,a:r.cid,t:'ديزاين',n:1,ok:true,...(r.title?{idea:r.title}:{})}:T.k==='edits'?{id,e:r.to,a:r.cid,n:Math.max(1,+r.n||1),ok:true}:{id,e:r.to,a:r.cid,amt:+r.amt||0,ok:true,...((r.dLinks||[])[0]?{link:r.dLinks[0]}:{})});
+  L.push(T.k==='posts'?{id,e:r.to,a:r.cid,t:plCT(r.sub||'بوست'),ok:true,...(r.idea?{idea:r.idea}:{})}:T.k==='designs'?{id,e:r.to,a:r.cid,t:'ديزاين',n:1,ok:true,...(r.title?{idea:r.title}:{})}:T.k==='edits'?{id,e:r.to,a:r.cid,n:Math.max(1,+r.n||1),ok:true}:{id,e:r.to,a:r.cid,amt:+r.amt||0,ok:true,...((r.dLinks||[])[0]?{link:r.dLinks[0]}:{})});
   await ref.set({...x,[T.k]:L})}
 function sheetReq(id,keep){const r=(S.reqs||[]).find(x=>x.id===id);if(!r)return;const prev=S.edit?.kind==='req'&&S.edit.id===id?S.edit:null;S.edit={kind:'req',id,view:1,j:JSON.stringify(r),files:prev?.files||[],links:prev?.links||'',note:prev?.note||'',prog:prev?.prog||'',cap:prev?.cap,scap:prev?.scap,slinks:prev?.slinks};const E=S.edit;
   const lead=isLead(),amTo=r.to===S.me?.id,st=RQ_S[r.status]||RQ_S.pending,to=rqPerson(r.to)?.name||r.toName||'';
-  const canDeliver=amTo&&['todo','changes'].includes(r.status);
+  const canDeliver=amTo&&['todo','changes'].includes(r.status)&&r.type!=='mod',kids=(S.reqs||[]).filter(k=>k.parent===r.id);
   openSheet(`<div class="sheet-h"><div><h3>${h(r.title||RQ_T[r.type]?.n)}</h3><div class="small muted">${h(r.cname||'')} · ${h(RQ_T[r.type]?.n||'')}</div></div><button class="x" data-act="close" aria-label="قفل">×</button></div><div class="stack">
    <div class="row" style="flex-wrap:wrap"><span class="pill ${st[1]}">${st[0]}</span><span class="small muted">من ${h(r.byName||'')}${to?' لـ '+h(to):''}${r.due?' · مطلوب '+rqDay(r.due):''}${r.type==='video'?' · '+(+r.n||1)+' فيديو':''}${r.type==='ads'&&+r.amt?' · '+money(r.amt)+' ج':''}</span></div>
+   ${r.dl||lateH(r)?`<div class="small">${r.dl?`⏰ الديدلاين: <b>${dlTxt(r.dl)}</b>`:''}${lateBadge(r)}${r.dlvAt?` · اتسلّمت ${dlTxt(r.dlvAt)}`:''}</div>`:''}
    ${r.desc?`<div style="white-space:pre-wrap">${linkify(r.desc)}</div>`:''}
+   ${r.type==='pl'&&(amTo||lead)&&OPEN_ST.includes(r.status)?`<div class="panel stack" style="gap:8px"><div class="small muted">ابعت للديزاينر أو المونتير من هنا (بيحتاج موافقة التيم ليدر)، وبعدين ارفع البوست كامل بالكابشن.</div><div class="row" style="flex-wrap:wrap"><button class="btn sm" data-act="rqKid" data-k="design">🎨 اطلب ديزاين</button><button class="btn sm" data-act="rqKid" data-k="video">🎬 ابعت للمونتاج</button><button class="btn sm" data-act="rqKid" data-k="ads">📣 اطلب تمويل</button></div></div>`:''}
+   ${kids.length?`<div><div class="label" style="margin-bottom:4px">طلبات المهمة دي</div><div class="list">${kids.map(rqCard).join('')}</div></div>`:''}
+   ${r.type==='mod'&&amTo&&OPEN_ST.includes(r.status)?`<button class="btn good" data-act="rqModDone" style="justify-content:center">خلصت متابعة الكومنتس والرسايل ✓</button>`:''}
    ${(r.refs||[]).length||(r.links||[]).length?`<div><div class="label" style="margin-bottom:6px">الريفرنس</div><div class="rq-grid">${(r.refs||[]).map(f=>rqThumb(f)).join('')}</div>${(r.links||[]).map(u=>`<div class="small">${linkify(u)}</div>`).join('')}</div>`:''}
    ${r.rev&&r.status==='changes'?`<div class="notice" style="margin:0"><b>التعديل المطلوب:</b> ${linkify(r.rev)}</div>`:''}
    ${(r.deliver||[]).length||(r.dLinks||[]).length||r.dNote?`<div class="panel" style="border-color:var(--good)"><div class="label" style="margin-bottom:6px">التسليم</div><div class="rq-grid">${(r.deliver||[]).map(f=>rqThumb(f)).join('')}</div>${(r.dLinks||[]).map(u=>`<div class="small">${linkify(u)}</div>`).join('')}${r.dNote?`<div class="small" style="margin-top:4px;white-space:pre-wrap">${linkify(r.dNote)}</div>`:''}${r.dCap?`<div style="margin-top:8px"><div class="label">الكابشن</div><div style="white-space:pre-wrap">${linkify(r.dCap)}</div></div>`:''}</div>`:''}
    ${r.status==='done'&&r.sendPend&&(r.sendEmail===meEmail()||lead)?`<div class="panel stack" style="gap:8px;border-color:var(--accent)"><h3>ابعت البوست كامل للعميل</h3><p class="small muted" style="margin:0">الشغل اتوافق عليه. راجع الكابشن وابعته للعميل على «بيزنسي» مع ${r.type==='video'?'لينك الفيديو':'الديزاين'}.</p>
      <textarea id="rqs_cap" rows="4" placeholder="الكابشن">${h(E.scap??r.dCap??r.dNote??'')}</textarea><textarea id="rqs_l" rows="2" dir="ltr" placeholder="لينك Drive (لو فيديو)">${h(E.slinks??(r.dLinks||[]).join('\n'))}</textarea>
      <button class="btn primary" data-act="rqSendC" style="justify-content:center">ابعته للعميل ✓</button></div>`:''}
-   ${canDeliver?`<div class="panel stack" style="gap:8px"><h3>سلّم الشغل</h3><input type="file" id="rqd_files" multiple>${E.files.length?`<div class="small muted">${E.files.length} ملف: ${h(E.files.map(f=>f.name).join('، '))}</div>`:''}
+   ${canDeliver?`<div class="panel stack" style="gap:8px"><h3>${r.type==='pl'?'ارفع البوست':'سلّم الشغل'}</h3><input type="file" id="rqd_files" multiple>${E.files.length?`<div class="small muted">${E.files.length} ملف: ${h(E.files.map(f=>f.name).join('، '))}</div>`:''}
      <p class="small muted" style="margin:0">ارفع الديزاين أو الصور بجودتها الأصلية. الفيديوهات حطها على Drive وحط اللينك.</p>
-     <textarea id="rqd_l" rows="2" dir="ltr" placeholder="لينك Drive أو أي لينك، كل لينك في سطر">${h(E.links)}</textarea>${['design','video'].includes(r.type)?`<textarea id="rqd_c" rows="3" placeholder="كابشن البوست / الريل (اللي هيتنشر مع الشغل)">${h(E.cap??r.dCap??'')}</textarea>`:''}<input id="rqd_n" value="${h(E.note)}" placeholder="ملاحظة (اختياري)">${E.prog?`<div class="small">${h(E.prog)}</div>`:''}
+     <textarea id="rqd_l" rows="2" dir="ltr" placeholder="لينك Drive أو أي لينك، كل لينك في سطر">${h(E.links)}</textarea>${['design','video','pl'].includes(r.type)?`<textarea id="rqd_c" rows="3" placeholder="كابشن البوست / الريل (اللي هيتنشر مع الشغل)">${h(E.cap??r.dCap??'')}</textarea>`:''}<input id="rqd_n" value="${h(E.note)}" placeholder="ملاحظة (اختياري)">${E.prog?`<div class="small">${h(E.prog)}</div>`:''}
      <button class="btn primary" data-act="rqDeliver" style="justify-content:center" ${E.busy?'disabled':''}>سلّمت · ابعت للمراجعة</button></div>`:''}
    ${lead&&!['done','rejected'].includes(r.status)?`<div><button class="btn sm" data-act="rqEdit">✏️ تعديل الطلب</button></div>`:''}
    ${lead&&r.status==='pending'?`<div class="row"><button class="btn primary" data-act="rqApprove">Approve · حوّلها مهمة</button><button class="btn" data-act="rqReject">ارفض</button></div>`:''}
@@ -1092,7 +1192,7 @@ function outGate(e){const hr=has(e,'moderator')?23:20,now=new Date(),it=(S.myTas
 function vCheckin(){
   if(!S.empsLoaded)return `<div class="empty"><h3>بيحمّل…</h3></div>`;
   const e=S.me;
-  if(!e&&(S.fin||S.tl))return `<div class="stack" style="max-width:520px;margin:0 auto">${bellBar()}${clientInbox()}${asksInbox()}${leadReqsPanel()}${bizTeamBox()}${notifBanner()}</div>`;
+  if(!e&&(S.fin||S.tl))return `<div class="stack" style="max-width:520px;margin:0 auto">${bellBar()}${tlDuty()}${clientInbox()}${asksInbox()}${leadReqsPanel()}${bizTeamBox()}${notifBanner()}</div>`;
   if(!e)return `<div class="panel empty" style="max-width:460px;margin:0 auto"><h3>إيميلك مش متسجّل عندنا</h3><p>انت داخل بـ <b dir="ltr">${h(S.email)}</b>. ابعت الإيميل ده للإدارة علشان يضيفوه لاسمك، وبعدين افتح اللينك تاني.</p></div>`;
   const d=today(),p=(S.myLog||{})[d]||{},m=d.slice(0,7);
   const days=Object.entries(S.myLog||{}).filter(([k])=>k.startsWith(m)).sort((a,b)=>b[0].localeCompare(a[0]));
@@ -1106,7 +1206,7 @@ function vCheckin(){
   const acc=(S.myMine?.byMonth||{})[m]||[];
   const lates=days.filter(([,x])=>lateKind(x.in)==='hard').length,soft=days.filter(([,x])=>lateKind(x.in)==='soft').length;
   return `<div class="stack" style="max-width:520px;margin:0 auto">
-   ${bellBar()}${S.fin||S.tl?clientInbox()+asksInbox()+leadReqsPanel():''}
+   ${bellBar()}${S.fin||S.tl?tlDuty()+clientInbox()+asksInbox()+leadReqsPanel():''}
    ${st?`<div class="panel" style="text-align:center;background:${mine?'var(--accent)':'var(--surface)'};color:${mine?'var(--accent-ink)':'inherit'};border-color:${mine?'var(--accent)':'var(--line)'}">
      <div style="font-size:28px">⭐</div><div class="small" style="opacity:.8">Star of the month · ${mName(st.month)}</div>
      <div style="font-family:var(--display);font-size:22px;font-weight:700">${h(st.name)}</div>
@@ -1120,7 +1220,7 @@ function vCheckin(){
    ${T?.msg?`<div class="panel" style="border-color:var(--accent);background:var(--accent-soft)"><div class="label" style="color:var(--accent)">رسالة ليك${T.byName?' من '+h(T.byName):''}</div><div style="white-space:pre-wrap;margin-top:4px">${h(T.msg)}</div>${T.msgReply?`<div class="small" style="margin-top:8px;color:var(--good)">ردّك: ${h(T.msgReply)} <b>✓✓</b></div>`:`<div class="row" style="margin-top:8px;gap:6px;flex-wrap:nowrap"><button class="btn sm primary" data-act="msgSeen" style="flex:none">تم ✓</button><input id="msg_r" placeholder="أو اكتب رد" style="flex:1;min-width:0"><button class="btn sm" data-act="msgReply" style="flex:none">ابعت</button></div>`}</div>`:''}
    ${planDueBox(e,acc,m)}${repDue(e,acc,m)}
    <div class="panel"><div class="row between"><h3>مهام النهارده</h3>${items.length?`<span class="pill ${doneN===items.length?'paid':'unpaid'}">${doneN} من ${items.length}</span>`:''}</div>
-    ${items.length?`<div class="list" style="margin-top:6px">${items.map((x,i)=>`<label class="item" style="cursor:pointer;gap:10px;align-items:flex-start"><input type="checkbox" data-act="taskDone" data-i="${i}" ${x.done?'checked':''} style="margin-top:4px"><span class="grow" style="min-width:0"><span style="${x.done?'text-decoration:line-through;color:var(--muted)':''}">${h(x.t)}</span>${x.link?`<div class="small" style="overflow-wrap:anywhere"><a href="${h(x.link)}" target="_blank" rel="noopener" dir="ltr">${h(x.link)}</a></div>`:''}${x.note?`<div class="small muted" style="white-space:pre-wrap;overflow-wrap:anywhere">${linkify(x.note)}</div>`:''}${x.rq?`<div><button class="btn xs" data-act="rqOpen" data-id="${x.rq}" style="margin-top:4px">افتح الطلب</button></div>`:''}${x.ok===true?'<div class="small" style="color:var(--good)">التيم ليدر أكّد إنها تمت ✓</div>':x.ok===false&&x.byEmp?`<div class="small" style="color:var(--gold)">متمّتش بسبب تأخير من ${h(x.byEmp)}${x.why?' ('+h(x.why)+')':''} · مش هتتخصم منك</div>`:x.ok===false?`<div class="small" style="color:var(--bad)">التيم ليدر علّم إنها متمّتش${x.why?' · '+h(x.why):''}</div>`:''}</span></label>`).join('')}</div>`:'<p class="small muted" style="margin:6px 0 0">مفيش مهام متسجّلة ليك النهارده.</p>'}</div>
+    ${items.length?`<div class="list" style="margin-top:6px">${items.map((x,i)=>`<label class="item" style="cursor:pointer;gap:10px;align-items:flex-start"><input type="checkbox" data-act="taskDone" data-i="${i}" ${x.done?'checked':''} style="margin-top:4px"><span class="grow" style="min-width:0"><span style="${x.done?'text-decoration:line-through;color:var(--muted)':''}">${h(x.t)}</span>${x.link?`<div class="small" style="overflow-wrap:anywhere"><a href="${h(x.link)}" target="_blank" rel="noopener" dir="ltr">${h(x.link)}</a></div>`:''}${x.note?`<div class="small muted" style="white-space:pre-wrap;overflow-wrap:anywhere">${linkify(x.note)}</div>`:''}${x.rq?`<div><button class="btn xs" data-act="rqOpen" data-id="${x.rq}" style="margin-top:4px">افتح الطلب</button></div>`:''}${x.ok===true?'<div class="small" style="color:var(--good)">التيم ليدر أكّد إنها تمت ✓</div>':x.ok===false&&x.byEmp?`<div class="small" style="color:var(--gold)">متمّتش بسبب تأخير من ${h(x.byEmp)}${x.why?' ('+h(x.why)+')':''} · مش هتتخصم منك</div>`:x.ok===false?`<div class="small" style="color:var(--bad)">التيم ليدر علّم إنها متمّتش${x.why?' · '+h(x.why):''}</div>`:''}</span></label>`).join('')}</div>`:`<p class="small muted" style="margin:6px 0 0">${(S.reqs||[]).some(r=>r.to===e.id&&r.due===d)?'مهامك من الخطة والتيم تحت في «مهامك».':'مفيش مهام متسجّلة ليك النهارده.'}</p>`}</div>
    ${reqsPanel()}${bizTeamBox()}
    ${has(e,'moderator')?modPanel(p):''}
    ${askBox()}
@@ -1309,6 +1409,7 @@ async function pushSync(){if(S.mode==='client'&&S.email&&auth.currentUser){try{c
     const j=JSON.stringify(body);if(j===pushSyncJ)return;const t=await auth.currentUser.getIdToken();const r=await fetch(pushUrl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...body,idToken:t})});if(r.ok)pushSyncJ=j}catch(_){}return}
   if(!S.me||!S.email||!auth.currentUser||!await remReady())return;try{
   const d=today(),m=d.slice(0,7),crA=((S.myMine?.byMonth||{})[m]||[]).filter(a=>a.cid&&a.r==='كريتور'),body={action:'sync',name:S.me.name||'',ci:(S.myLog||{})[d]?.in?d:'',mod:has(S.me,'moderator'),cr:crA.length>0,pl:crA.filter(a=>S.myPlans?.[planId(m,a.cid)]?.status!=='sent').length,plm:m};
+  {const L=DLS(),tm=nextWD(d);body.tl=!!(S.tl||has(S.me,'teamleader'));if(body.tl){body.dh={s:hOf(L.ds),e:hOf(L.de),w0:hOf(L.w0),w1:hOf(L.w1)};body.distD=S.dists?.[tm]?tm:''}const D=myDls();if(D)body.dls=D}
   if(S.myTaskLoaded===d){const it=S.myTask?.items||[];body.td={d,n:it.length,k:it.filter(x=>x.done).length}}
   if(notifPerm()==='granted'&&'serviceWorker' in navigator){const reg=await navigator.serviceWorker.ready;const sb=reg.pushManager&&await reg.pushManager.getSubscription();if(sb)body.sub=sb.toJSON()}
   const j=JSON.stringify(body);if(j===pushSyncJ)return;
@@ -1744,10 +1845,11 @@ function vAtt(){
     <div class="stack" style="gap:10px">${D.covers.map((C,ci)=>hostOf(C)==='panel'?coverUI(ci):'').join('')||'<p class="small muted" style="margin:0">مفيش تغطية هنا النهارده.</p>'}</div>
     <div class="row between" style="gap:6px;margin-top:8px"><button class="btn xs" data-act="cvAdd">+ تغطية</button><button class="btn sm primary" data-act="saveAtt">حفظ</button></div></div>`;
   return `<div class="stack">
-  <div class="row between"><h2>المتابعة اليومية</h2><div class="row"><input type="date" id="attDate" value="${d}" style="width:auto"><span class="pill ${saved?'paid':'none'}">${saved?'متسجّلة':'لسه ماتسجّلتش'}</span></div></div>
+  <div class="row between"><h2>المهام والمتابعة</h2><div class="row"><input type="date" id="attDate" value="${d}" style="width:auto"><span class="pill ${saved?'paid':'none'}">${saved?'متسجّلة':'لسه ماتسجّلتش'}</span></div></div>
   ${isFri(d)?'<div class="notice">الجمعة إجازة: مفيش بصمة، ومش بيتحسب غياب أو تأخير.</div>':''}
   ${S.attDraft.fromPlan&&!saved?'<div class="notice" style="background:var(--accent-soft)">📅 مهام الكريتور والديزاينر اتعلّمت لوحدها من خطة الشهر. راجعها وعدّل لو محتاج ودوس حفظ.</div>':''}
-  <nav class="att-nav" aria-label="أقسام المتابعة">${[['reqs','الطلبات'],['posts','الكريتورز'],['designs','الديزاينرز'],['mods','الموديريتورز'],['shoots','المصورين'],['edits','المونتيرز'],['ads','الميديا باير'],...(restP.length?[['rest','باقي التيم']]:[]),['cover','التغطية'],['end','إنهاء اليوم']].map(([k,nm])=>`<button class="chip" data-act="attJump" data-k="${k}">${nm}</button>`).join('')}</nav>
+  <div class="panel" id="sec_board"><div class="row between"><h3>مهام ${d===today()?'النهارده':rqDay(d)} لكل واحد</h3>${d===today()&&isLead()?`<button class="btn sm" data-act="distOpen">توزيع بكره</button>`:''}</div><div style="margin-top:8px">${dayBoard(d,{over:d===today()})}</div><p class="small muted" style="margin:8px 0 0">أي مهمة بتتوافق عليها بتتسجّل «تم فعلاً» تحت لوحدها وبتتحسب في المرتبات.</p></div>
+  <nav class="att-nav" aria-label="أقسام المتابعة">${[['board','مهام اليوم'],['reqs','المهام'],['posts','الكريتورز'],['designs','الديزاينرز'],['mods','الموديريتورز'],['shoots','المصورين'],['edits','المونتيرز'],['ads','الميديا باير'],...(restP.length?[['rest','باقي التيم']]:[]),['cover','التغطية'],['end','إنهاء اليوم']].map(([k,nm])=>`<button class="chip" data-act="attJump" data-k="${k}">${nm}</button>`).join('')}</nav>
   <p class="small muted" style="margin:0">اللي بتحدده هنا هو مهام اليوم لكل واحد، وبتظهرله في «صفحتي». الموظف بيعلّم على اللي خلّصه، وانت قبل «إنهاء اليوم» بتأكّد على كل مهمة «تم فعلاً» أو «متمّتش». المرتب والفاتورة بيحسبوا اللي «تم فعلاً» بس.</p>
   ${leadReqsPanel()}
   ${block('posts',EN.posts)}
@@ -1786,6 +1888,7 @@ function vPay(){
      if(l.type==='plan')return `<tr><td>${h(l.what)}<div class="small muted">10% من المرتب على خطة الشهر</div></td><td></td><td class="num minus">−${money(-l.amt)}</td><td class="num minus">−${money(-l.amt)}</td></tr>`;
      if(l.type==='report')return `<tr><td>${h(l.what)}<div class="small muted">10% من المرتب على تقرير الشهر</div></td><td></td><td class="num minus">−${money(-l.amt)}</td><td class="num minus">−${money(-l.amt)}</td></tr>`;
      if(l.type==='noclose')return `<tr><td>ماقفلش المتابعة يوم <span class="num">${l.date.slice(8)}/${l.date.slice(5,7)}</span><div class="small muted">«إنهاء اليوم» ماتداسش قبل 11:59 بالليل</div></td><td></td><td class="num minus">−${money(-l.amt)}</td><td class="num minus">−${money(-l.amt)}</td></tr>`;
+     if(l.type==='tlate')return `<tr><td>${h(l.what)}<div class="small muted">خصم ${DLS().pct}% من اليوم لكل ساعة تأخير</div></td><td></td><td class="num minus">−${money(-l.amt)}</td><td class="num minus">−${money(-l.amt)}</td></tr>`;
      if(l.type==='late')return `<tr><td>تأخير يوم <span class="num">${l.date.slice(8)}/${l.date.slice(5,7)}</span><div class="small muted">حضر <span class="num">${l.t}</span> · خصم ${C.lf*100}% من يوم</div></td><td></td><td class="num minus">−${money(-l.amt)}</td><td class="num minus">−${money(-l.amt)}</td></tr>`;
      if(l.type==='deliv')return `<tr><td>${l.kind} · ${h(l.client)}<div class="small muted">${l.n} ${l.kind}${l.tot!==l.n?` من ${l.tot}`:''} · الحد الأدنى ${l.target}</div></td><td class="num">${money(l.share)}</td><td class="num minus">${l.amt<l.share-0.5?'−'+money(l.share-l.amt):'—'}</td><td class="num">${money(l.amt)}</td></tr>`;
      if(l.type==='design')return `<tr><td>تصميم · ${h(l.client)}<div class="small muted">${l.n} تصميم${l.tot!==l.n?` من ${l.tot}`:''} · الحد الأدنى ${l.target||C.tgt}</div></td><td class="num">${money(l.share)}</td><td class="num minus">${l.amt<l.share?'−'+money(l.share-l.amt):'—'}</td><td class="num">${money(l.amt)}</td></tr>`;
@@ -1842,6 +1945,20 @@ function vSet(){
    <h3>شريك التصوير</h3>
    <div class="field" style="max-width:360px"><label class="label" for="s_pp">نصيب شريك التصوير (${F.photoPct.partner}% من كل باقة تصوير) يروح لـ</label><select id="s_pp"><option value="">—</option>${S.emps.map(e=>`<option value="${e.id}" ${F.photoPartner===e.id?'selected':''}>${h(e.name)}</option>`).join('')}</select></div>
    <div><button class="btn primary" data-act="saveFin">حفظ النسب والمرتبات</button></div></div>
+  ${(()=>{const L=DLS();return `<div class="panel stack"><h3>مواعيد المهام والديدلاين</h3>
+   <div class="grid3">
+    <div class="field"><label class="label" for="dl_cr">الكريتور يسلّم مهامه لحد</label><input id="dl_cr" type="time" value="${h(L.cr)}"></div>
+    <div class="field"><label class="label" for="dl_dz">الديزاينر لحد</label><input id="dl_dz" type="time" value="${h(L.dz)}"></div>
+    <div class="field"><label class="label" for="dl_ed">المونتير (ساعة من الاستلام)</label><input id="dl_ed" type="number" min="1" value="${h(L.edH)}"></div>
+    <div class="field"><label class="label" for="dl_mb">الميديا باير (ساعات شغل)</label><input id="dl_mb" type="number" min="1" value="${h(L.mbH)}"></div>
+    <div class="field"><label class="label" for="dl_w0">مواعيد الشغل من</label><input id="dl_w0" type="time" value="${h(L.w0)}"></div>
+    <div class="field"><label class="label" for="dl_w1">لحد</label><input id="dl_w1" type="time" value="${h(L.w1)}"></div>
+    <div class="field"><label class="label" for="dl_ds">التيم ليدر يوزّع مهام بكره من</label><input id="dl_ds" type="time" value="${h(L.ds)}"></div>
+    <div class="field"><label class="label" for="dl_de">آخر سماحية للتوزيع</label><input id="dl_de" type="time" value="${h(L.de)}"></div>
+    <div class="field"><label class="label" for="dl_pct">خصم كل ساعة تأخير (% من اليوم)</label><input id="dl_pct" type="number" min="0" max="100" value="${h(L.pct)}"></div>
+   </div>
+   <p class="small muted" style="margin:0">الديزاينر لو استلم بعد ميعاده، الديدلاين بيبقى نفس الميعاد تاني يوم. الميديا باير بتتحسبله ساعات جوه مواعيد الشغل بس. أي حد يتأخر عن الديدلاين (أو التيم ليدر عن التوزيع) بيتخصم منه النسبة دي من يومه عن كل ساعة، وبحد أقصى يوم للمهمة الواحدة.${L.since?` الخصم شغال من ${rqDay(L.since)}.`:' الخصم بيبدأ من يوم ما تحفظ المواعيد دي.'}</p>
+   <div><button class="btn primary" data-act="saveDl">حفظ مواعيد المهام</button></div></div>`})()}
   <div class="panel stack"><h3>مواعيد الحضور</h3>
    <div class="grid3">
     <div class="field"><label class="label" for="s_open">البصمة بتفتح من</label><input id="s_open" type="time" value="${h(OPEN())}"></div>
@@ -2293,27 +2410,28 @@ document.addEventListener('click',async e=>{
   if(a==='rqNew'){S.edit=null;return sheetReqNew(b.dataset.c)}
   if(a==='rqType'){rqRead();const E=S.edit;E.type=b.dataset.k;E.to=rqDefTo(E.type,E.cid);return sheetReqNew()}
   if(a==='rqF'){S.rqF=b.dataset.k;render();return}
-  if(a==='rqEdit'){const r=(S.reqs||[]).find(x=>x.id===S.edit?.id);if(!r)return;S.edit={kind:'rqnew',id:r.id,cid:r.cid,type:r.type,to:r.to,title:r.title||'',desc:r.desc||'',due:r.due||tomorrow(),n:r.n||1,amt:r.amt||'',links:(r.links||[]).join('\n'),files:[],oldRefs:r.refs||[]};return sheetReqNew()}
+  if(a==='rqEdit'){const r=(S.reqs||[]).find(x=>x.id===S.edit?.id);if(!r)return;S.edit={kind:'rqnew',id:r.id,cid:r.cid,type:r.type,sub:r.sub||'ستوري',to:r.to,title:r.title||'',desc:r.desc||'',due:r.due||tomorrow(),n:r.n||1,amt:r.amt||'',links:(r.links||[]).join('\n'),files:[],oldRefs:r.refs||[]};return sheetReqNew()}
   if(a==='rqSave'&&S.edit?.id){rqRead();const E=S.edit,r=(S.reqs||[]).find(x=>x.id===E.id);if(!r)return;if(!E.to)return toast('اختار مطلوب من مين');if(!E.title&&!E.desc)return toast('اكتب المطلوب');
-    const to=rqPerson(E.to),upd={cid:E.cid,cname:cli(E.cid)?.name||r.cname,type:E.type,title:E.title.slice(0,120),desc:E.desc.slice(0,2000),to:E.to,toName:to?.name||'',toEmail:to?.email||'',due:E.due,links:splitLinks(E.links),see:[...new Set([...(r.see||[]),to?.email].filter(Boolean))],...(E.type==='video'?{n:Math.max(1,+E.n||1)}:{}),...(E.type==='ads'?{amt:+E.amt||0}:{})};
+    const to=rqPerson(E.to),upd={cid:E.cid,cname:cli(E.cid)?.name||r.cname,type:E.type,...(E.type==='pl'?{sub:E.sub||r.sub||'ستوري'}:{}),...(E.due!==r.due&&OPEN_ST.includes(r.status)&&r.status!=='pending'?{dl:calcDL(E.type,E.due)}:{}),title:E.title.slice(0,120),desc:E.desc.slice(0,2000),to:E.to,toName:to?.name||'',toEmail:to?.email||'',due:E.due,links:splitLinks(E.links),see:[...new Set([...(r.see||[]),to?.email].filter(Boolean))],...(E.type==='video'?{n:Math.max(1,+E.n||1)}:{}),...(E.type==='ads'?{amt:+E.amt||0}:{})};
     E.busy=true;sheetReqNew();
     try{await db.doc('reqs/'+r.id).update(upd);if(E.files.length){const up=await rqUpload(r.id,E.files,p=>{const el=document.querySelector('[data-act=rqSave]');if(el)el.textContent=p});await db.doc('reqs/'+r.id).update({refs:[...(r.refs||[]),...up]})}
-      if(['todo','changes'].includes(r.status)){await rqUnTask(r);await rqToTask({...r,...upd,id:r.id},null,r.status==='changes'?'تعديل: ':'');rqPush(r.id,'edit')}
+      if(['todo','changes'].includes(r.status)){if(!['pl','mod'].includes(r.type)){await rqUnTask(r);await rqToTask({...r,...upd,id:r.id},null,r.status==='changes'?'تعديل: ':'')}rqPush(r.id,'edit')}
       toast('الطلب اتعدّل ✓');S.edit=null;closeSheet()}catch(e){console.warn(e);E.busy=false;toast('التعديل ماتحفظش، جرّب تاني');sheetReqNew()}return}
   if(a==='rqSave'){rqRead();const E=S.edit,lead=isLead();if(!E.cid)return toast('اختار الأكونت');if(!E.to)return toast('اختار مطلوب من مين');if(!E.title&&!E.desc)return toast('اكتب المطلوب');
     const to=rqPerson(E.to),cname=cli(E.cid)?.name||myCrAccs().find(a=>a.cid===E.cid)?.name||'',me=S.me,A=S.asg?.[E.cid];
     const crE=lead&&A?(A.creator||[]).map(x=>rqPerson(x.e)?.email).filter(Boolean):[];
     const see=[...new Set([meEmail(),to?.email,...crE].filter(Boolean))];
     const ref=db.collection('reqs').doc(),TS=firebase.firestore.FieldValue.serverTimestamp();
-    const d={cid:E.cid,cname,month:today().slice(0,7),type:E.type,title:E.title.slice(0,120),desc:E.desc.slice(0,2000),to:E.to,toName:to?.name||'',toEmail:to?.email||'',by:me?.id||'',byName:me?.name||(S.fin?'الإدارة':'التيم ليدر'),byEmail:meEmail(),
-      due:E.due,refs:E.preRefs||[],links:splitLinks(E.links),status:lead?'todo':'pending',see,at:TS,...(E.type==='video'?{n:Math.max(1,+E.n||1)}:{}),...(E.type==='ads'?{amt:+E.amt||0}:{}),...(lead?{apBy:me?.name||'الإدارة'}:{})};
+    const d={cid:E.cid,cname,month:(E.due||today()).slice(0,7),type:E.type,title:(E.type==='pl'?plN(E.sub||'ستوري')+(E.title?' · '+E.title:''):E.title).slice(0,120),desc:E.desc.slice(0,2000),to:E.to,toName:to?.name||'',toEmail:to?.email||'',by:me?.id||'',byName:me?.name||(S.fin?'الإدارة':'التيم ليدر'),byEmail:meEmail(),
+      due:E.due,refs:E.preRefs||[],links:splitLinks(E.links),status:lead?'todo':'pending',see,at:TS,...(E.type==='pl'?{sub:E.sub||'ستوري',idea:E.title.slice(0,120)}:{}),...(E.parent?{parent:E.parent}:{}),...(lead?{dl:calcDL(E.type,E.due)}:{}),...(E.type==='video'?{n:Math.max(1,+E.n||1)}:{}),...(E.type==='ads'?{amt:+E.amt||0}:{}),...(lead?{apBy:me?.name||'الإدارة'}:{})};
     E.busy=true;sheetReqNew();
     try{await ref.set(d);if(E.files.length){const up=await rqUpload(ref.id,E.files,p=>{const el=document.querySelector('[data-act=rqSave]');if(el)el.textContent=p});await ref.update({refs:[...(E.preRefs||[]),...up],upAt:TS})}if(E.fromCreq)db.doc('creqs/'+E.fromCreq).update({status:'seen'}).catch(err);
-      if(lead)await rqToTask({...d,id:ref.id});rqPush(ref.id,lead?'todo':'new');cNote(d.cid,{design:'تم طلب ديزاين جديد لصفحتك',video:'تم طلب مونتاج فيديو جديد لصفحتك',ads:'تم طلب تمويل إعلان جديد',other:'تم طلب شغل جديد لصفحتك'}[d.type]+(lead?'، وبدأنا الشغل':''));toast(lead?'الطلب اتبعت واتحول مهمة ✓':'الطلب اتبعت للموافقة ✓');S.edit=null;closeSheet()}
+      if(lead&&!['pl','mod'].includes(d.type))await rqToTask({...d,id:ref.id});if(lead)dlRemind({...d,id:ref.id});if(d.type==='pl')await plAddItem({...d,id:ref.id}).catch(err);if(E.parent){const P=(S.reqs||[]).find(x=>x.id===E.parent);if(P&&!P.dlvAt)db.doc('reqs/'+P.id).update({dlvAt:Date.now()}).catch(err)}
+      rqPush(ref.id,lead?'todo':'new');cNote(d.cid,({design:'تم طلب ديزاين جديد لصفحتك',video:'تم طلب مونتاج فيديو جديد لصفحتك',ads:'تم طلب تمويل إعلان جديد',other:'تم طلب شغل جديد لصفحتك',pl:'اتضاف بوست جديد لخطة صفحتك'}[d.type]||'تم طلب شغل جديد لصفحتك')+(lead?'، وبدأنا الشغل':''));toast(lead?'المهمة اتبعتت ✓':'اتبعتت للموافقة ✓');S.edit=null;closeSheet()}
     catch(e){console.warn(e);E.busy=false;E.prog='';toast('الطلب ماتبعتش، جرّب تاني');sheetReqNew()}return}
   if(a==='rqApprove'||a==='rqReject'||a==='rqDone'||a==='rqChanges'){const r=(S.reqs||[]).find(x=>x.id===S.edit?.id);if(!r)return;const nm=S.me?.name||(S.fin?'الإدارة':'التيم ليدر');b.disabled=true;
     let ok=false;
-    if(a==='rqApprove'){ok=await save(async()=>{await db.doc('reqs/'+r.id).update({status:'todo',apBy:nm});await rqToTask(r)},'اتوافق واتحول مهمة ✓');if(ok)cNote(r.cid,'المدير وافق على الريفرنس، وبدأنا الشغل')}
+    if(a==='rqApprove'){const dl=calcDL(r.type,r.due);ok=await save(async()=>{await db.doc('reqs/'+r.id).update({status:'todo',apBy:nm,dl});if(!['pl','mod'].includes(r.type))await rqToTask(r);dlRemind({...r,dl})},'اتوافق واتحول مهمة ✓');if(ok)cNote(r.cid,'المدير وافق على الريفرنس، وبدأنا الشغل')}
     if(a==='rqReject')ok=await save(()=>db.doc('reqs/'+r.id).update({status:'rejected',apBy:nm}),'اترفض');
     if(a==='rqDone'){const how=document.querySelector('input[name=rq_to]:checked')?.value||'no',toC=how==='now',cap=v('rq_cap'),snd=how==='cr'?rqSender(r):null,se=snd?cleanEmail(snd.email||''):'';
       ok=await save(async()=>{await db.doc('reqs/'+r.id).update({status:'done',doneDay:today(),apBy:nm,...(toC?{sentC:true}:{}),...(snd?{sendPend:true,sendTo:snd.id,sendEmail:se,dCap:cap,see:firebase.firestore.FieldValue.arrayUnion(se)}:{})});await rqToAtt(r);await rqMarkTask(r,{done:true,ok:true});if(snd)await rqSendTask(r,snd.id)},'تم ✓ واتسجّل في المتابعة اليومية');
@@ -2321,6 +2439,21 @@ document.addEventListener('click',async e=>{
       else if(ok){if(toC)await sendWork({cid:r.cid,rq:r.id,kind:r.type,title:r.title||RQ_T[r.type]?.n||'',caption:cap,files:(r.deliver||[]).map(f=>({url:f.url,name:f.name,type:f.type})),links:r.dLinks||[],...(r.type==='ads'?{amt:+r.amt||0}:{})}).catch(err);else cNote(r.cid,'وافق المدير على الشغل')}}
     if(a==='rqChanges'){const note=v('rq_rev');if(!note){b.disabled=false;return toast('اكتب التعديل المطلوب')}ok=await save(async()=>{await db.doc('reqs/'+r.id).update({status:'changes',rev:note});await rqToTask(r,today(),'تعديل: ')},'التعديل اتبعت')}
     if(ok){rqPush(r.id,{rqApprove:'todo',rqDone:'done',rqChanges:'changes'}[a]||'');closeSheet()}else b.disabled=false;return}
+  if(a==='rqSub'){rqRead();if(S.edit?.kind==='rqnew'){S.edit.sub=b.dataset.k;sheetReqNew()}return}
+  if(a==='rqKid'){const r=(S.reqs||[]).find(x=>x.id===S.edit?.id);if(!r)return;const k=b.dataset.k;S.edit={kind:'rqnew',cid:r.cid,type:k,sub:'ستوري',to:'',title:r.idea||r.title||'',desc:r.dCap||'',due:r.due<today()?today():r.due,n:1,amt:'',links:'',files:[],parent:r.id};S.edit.to=rqDefTo(k,r.cid);return sheetReqNew()}
+  if(a==='rqModDone'){const r=(S.reqs||[]).find(x=>x.id===S.edit?.id);if(!r)return;b.disabled=true;if(await save(()=>db.doc('reqs/'+r.id).update({status:'done',dlvAt:Date.now(),doneDay:today()}),'تمام ✓'))closeSheet();else b.disabled=false;return}
+  if(a==='plAp'){readPlan();const E=S.edit;if(!S.asg?.[E.cid])return toast('وزّع الأكونت الأول (مين الكريتور والموديريتور) من تبويب التوزيع');b.disabled=true;const nm=S.me?.name||(S.fin?'الإدارة':'التيم ليدر'),sig=plSig(E.data.items);
+    try{await db.doc('plans/'+E.id).set({cid:E.cid,month:E.m,items:E.data.items,form:E.data.form,shoots:E.data.shoots,q:E.data.q,tk:true,apBy:nm,apAt:firebase.firestore.FieldValue.serverTimestamp(),apSig:sig},{merge:true});const R=await plToTasks(E);
+      E.raw={...(E.raw||{}),tk:true,apSig:sig,apBy:nm};toast(`اتعتمدت ✓ · ${R.add} مهمة جديدة${R.upd?` · ${R.upd} اتحدثت`:''}${R.del?` · ${R.del} اتشالت`:''}`);planSheet()}catch(e){console.warn(e);toast('ماتعتمدتش، جرّب تاني');b.disabled=false}return}
+  if(a==='distOpen')return sheetDist();
+  if(a==='distOk'){const tm=S.edit?.d||nextWD(today()),nm=S.me?.name||(S.fin?'الإدارة':'التيم ليدر');b.disabled=true;
+    if(await save(()=>db.doc('dist/'+tm).set({d:tm,m:tm.slice(0,7),at:firebase.firestore.FieldValue.serverTimestamp(),atMs:Date.now(),by:nm}),'التوزيع اتأكد ✓')){const to=[...new Set((S.reqs||[]).filter(r=>r.due===tm&&r.status!=='rejected').map(r=>r.toEmail).filter(Boolean))];
+      if(to.length&&auth.currentUser)auth.currentUser.getIdToken().then(t=>fetch(pushUrl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'notify',idToken:t,to,text:`🗓️ مهام ${rqDay(tm)} اتوزعت، شوفها في «صفحتي»`})})).catch(()=>{});closeSheet()}else b.disabled=false;return}
+  if(a==='tlFollow'){const nm=S.me?.name||(S.fin?'الإدارة':'التيم ليدر');await save(()=>db.doc('dfol/'+today()).set({d:today(),L:firebase.firestore.FieldValue.arrayUnion({t:hm(new Date()),by:nm})},{merge:true}),'اتسجّلت المتابعة ✓');return}
+  if(a==='saveDl'){const g=id=>v(id),L=DLS(),dl={cr:g('dl_cr')||L.cr,dz:g('dl_dz')||L.dz,edH:Math.max(1,+g('dl_ed')||24),mbH:Math.max(1,+g('dl_mb')||2),w0:g('dl_w0')||L.w0,w1:g('dl_w1')||L.w1,ds:g('dl_ds')||L.ds,de:g('dl_de')||L.de,pct:Math.max(0,Math.min(100,+g('dl_pct')||0)),since:L.since||today()};
+    if(dl.de<=dl.ds)return toast('آخر ميعاد للتوزيع لازم يكون بعد بدايته');if(dl.w1<=dl.w0)return toast('نهاية الشغل لازم تكون بعد بدايته');
+    if(await save(()=>db.doc('cfg/settings').set({dl},{merge:true}),'مواعيد المهام اتحفظت ✓')){S.cfg={...S.cfg,dl};render()}return}
+  if(a==='cRateAsk'){const c=document.getElementById('ta_c')?.value;if(!c)return;const m=today().slice(0,7);if(await save(()=>db.doc('cdocs/'+c+'_rate_'+m).set({cid:c,kind:'rate',month:m,at:firebase.firestore.FieldValue.serverTimestamp()}),'اتبعت للعميل ✓'))cNote(c,'ياريت تقيّم شغلنا الشهر ده من «بيزنسي» ⭐');return}
   if(a==='taAsk'){const c=document.getElementById('ta_c')?.value;if(!c)return;S.taC=c;S.edit=null;return sheetTAsk(c)}
   if(a==='cChat'){const c=document.getElementById('ta_c')?.value;if(!c)return;S.taC=c;S.prevTab=S.tab;S.tab='chat';window.scrollTo(0,0);return openChat('c_'+c)}
   if(a==='taSeen'){await save(()=>db.doc('cwork/'+b.dataset.id).update({handled:true}));return}
@@ -2331,9 +2464,9 @@ document.addEventListener('click',async e=>{
   if(a==='rqSendC'){const r=(S.reqs||[]).find(x=>x.id===S.edit?.id),E=S.edit;if(!r)return;rqdRead();const cap=(E.scap??r.dCap??'').trim(),links=splitLinks(E.slinks??(r.dLinks||[]).join('\n'));if(!cap)return toast('اكتب الكابشن');b.disabled=true;E.busy=true;
     const ok=await save(async()=>{await sendWork({cid:r.cid,rq:r.id,kind:r.type,title:r.title||RQ_T[r.type]?.n||'',caption:cap,files:(r.deliver||[]).map(f=>({url:f.url,name:f.name,type:f.type})),links,byEmail:meEmail()});await db.doc('reqs/'+r.id).update({sendPend:false,sentC:true,sentAt:firebase.firestore.FieldValue.serverTimestamp()});await rqSendDone(r)},'اتبعت للعميل ✓');
     E.busy=false;if(ok){S.edit=null;closeSheet()}else b.disabled=false;return}
-  if(a==='rqDeliver'){const r=(S.reqs||[]).find(x=>x.id===S.edit?.id),E=S.edit;if(!r)return;rqdRead();const links=splitLinks(E.links);if(!E.files.length&&!links.length)return toast('ارفع الشغل أو حط لينكه');
+  if(a==='rqDeliver'){const r=(S.reqs||[]).find(x=>x.id===S.edit?.id),E=S.edit;if(!r)return;rqdRead();const links=splitLinks(E.links),kidF=r.type==='pl'?(S.reqs||[]).filter(k=>k.parent===r.id&&k.status==='done').flatMap(k=>k.deliver||[]).filter(f=>!(r.deliver||[]).some(x=>x.url===f.url)):[],kidL=r.type==='pl'?(S.reqs||[]).filter(k=>k.parent===r.id&&k.status==='done').flatMap(k=>k.dLinks||[]):[];links.push(...kidL.filter(u=>!links.includes(u)));if(!E.files.length&&!links.length&&!kidF.length&&!(r.deliver||[]).length)return toast('ارفع الشغل أو حط لينكه');
     E.busy=true;b.disabled=true;try{const up=E.files.length?await rqUpload(r.id,E.files,p=>{const el=b;if(el)el.textContent=p}):[];
-      await db.doc('reqs/'+r.id).update({deliver:[...(r.deliver||[]),...up],dLinks:[...new Set([...(r.dLinks||[]),...links])],dNote:E.note||'',...(E.cap!=null?{dCap:E.cap.trim().slice(0,3000)}:{}),status:'review',upAt:firebase.firestore.FieldValue.serverTimestamp()});
+      await db.doc('reqs/'+r.id).update({deliver:[...(r.deliver||[]),...kidF,...up],dLinks:[...new Set([...(r.dLinks||[]),...links])],dNote:E.note||'',...(E.cap!=null?{dCap:E.cap.trim().slice(0,3000)}:{}),...(r.dlvAt?{}:{dlvAt:Date.now()}),status:'review',upAt:firebase.firestore.FieldValue.serverTimestamp()});
       rqMarkTask(r,{done:true}).catch(err);rqPush(r.id,'review');cNote(r.cid,{design:'الديزاينر خلص التصميم، وجاري المراجعة',video:'المونتير خلص الفيديو، وجاري المراجعة',ads:'الميديا باير جهّز الإعلان، وجاري المراجعة'}[r.type]||'خلصنا الشغل، وجاري المراجعة');toast('اتسلّم ✓ ومستني المراجعة');S.edit=null;closeSheet()}
     catch(e){console.warn(e);E.busy=false;toast('الرفع ماكملش، جرّب تاني');sheetReq(r.id)}return}
   if(a==='bell'){S.bellOpen=!S.bellOpen;if(S.bellOpen){S.bellSeen=inSeen();try{localStorage.setItem('pensell_inSeen',String(Date.now()))}catch(_){}loadInbox(true)}render();return}
