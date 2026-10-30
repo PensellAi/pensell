@@ -389,7 +389,7 @@ async function start(u){
   mainEl().innerHTML='<div class="empty"><h3>بيحمّل…</h3></div>';
   db.doc('cfg/settings').onSnapshot(s=>{if(s.exists)S.cfg={...S.cfg,...s.data()};subscribePush();rr()},err);
   if(S.mode==='client'){if(/^#(chat-|call)/.test(location.hash))S.pendingHash=location.hash;startClient();return}
-  reqsSub();bizSubLead();if(location.hash==='#reqs'&&(own||tl))S.tab='me';
+  reqsSub();bizSubLead();cwMineSub();if(location.hash==='#reqs'&&(own||tl))S.tab='me';
   if(/^#(chat-|call)/.test(location.hash))S.pendingHash=location.hash;
   if(location.hash==='#me'&&S.mode==='app')S.tab='me';if(location.hash==='#site'&&own)S.tab='site';
   const empQ=S.mode==='app'?db.collection('employees'):db.collection('employees').where('email','==',S.email);
@@ -836,6 +836,7 @@ const cEmails=c=>[...new Set((c?.emails||[]).map(cleanEmail).filter(x=>x.include
 // إشعار للعميل (من غير تفاصيل داخلية): السيرفر بيبعته لإيميلات العميل وبيتسجّل في الجرس بتاعه
 function cNote(cid,t){if(!cid||!t||!auth.currentUser||S.mode==='client')return;auth.currentUser.getIdToken().then(tok=>fetch(pushUrl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'cnote',idToken:tok,cid,t:String(t).slice(0,160)})})).catch(()=>{})}
 // المدير: إيميلات العميل → مين يدخل «بيزنسي»، والشات بتاعه
+function parseEmails(t){return [...new Set(String(t||'').split(/[\s,;]+/).map(cleanEmail).filter(x=>/^[^@]+@[^@]+\.[^@]+$/.test(x)))]}
 async function syncClientAccess(cid,emails,oldEmails,name){const bt=db.batch();
   for(const em of oldEmails||[])if(!emails.includes(em))bt.delete(db.doc('clientUsers/'+em));
   for(const em of emails)bt.set(db.doc('clientUsers/'+em),{cid,name});
@@ -854,7 +855,7 @@ function syncClientStats(){if(!(S.fin||S.tl)||!S.attLoaded||S.month!==today().sl
     const P=S.plans?.[planId(S.month,c.id)];o.plan=!!(P&&(P.status==='sent'||P.rating));o.report=Object.values(S.reps||{}).some(r=>r.cid===c.id&&r.month===S.month&&r.status==='sent');o.month=S.month;
     const j=JSON.stringify(o);if((S.csJ??={})[c.id]===j)continue;S.csJ[c.id]=j;db.doc('cstats/'+c.id).set(o).catch(err)}}
 // ابعت شغل للعميل يشوفه ويوافق أو يطلب تعديل
-async function sendWork(d){const ref=db.collection('cwork').doc();await ref.set({...d,status:'pending',at:firebase.firestore.FieldValue.serverTimestamp(),by:S.me?.name||(S.fin?'الإدارة':'التيم ليدر')});cNote(d.cid,d.rq?'وافق المدير على الشغل، وبعتناه لحضرتك تبص عليه':'بعتنالك شغل جديد تبص عليه');return ref.id}
+async function sendWork(d){const ref=db.collection('cwork').doc();await ref.set({...d,status:'pending',at:firebase.firestore.FieldValue.serverTimestamp(),by:S.me?.name||(S.fin?'الإدارة':'التيم ليدر')});cNote(d.cid,d.kind==='ask'?'التيم محتاج رأي حضرتك في حاجة، ادخل بيزنسي ترد':d.rq?'وافق المدير على الشغل، وبعتناه لحضرتك تبص عليه':'بعتنالك شغل جديد تبص عليه');return ref.id}
 // فاتورة العميل: بتطلع على «بيزنسي» يوم 25 (أو لما المدير يبعتها)
 const cinvId=r=>r.clientId+'_'+r.month;
 function invLines(r){const L=[];if(r.mgmt?.on)L.push({d:'باقة الإدارة'+(r.mgmt.desc?` (${r.mgmt.desc})`:''),a:+r.mgmt.price||0});if(photoOn(r))L.push({d:'باقة التصوير'+(photoDesc(r)?` (${photoDesc(r)})`:''),a:+r.photo?.price||0});
@@ -866,6 +867,24 @@ async function issueCinv(r,manual){const c=cli(r.clientId);if(!c||!cEmails(c).le
 function dueSched(key,item){if(!auth.currentUser)return;auth.currentUser.getIdToken().then(t=>fetch(pushUrl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'due',idToken:t,key,item})})).catch(()=>{})}
 async function autoIssueInvoices(){if(!S.fin||S.cinvDone===S.month||+today().slice(8)<25||S.month!==today().slice(0,7)||!S.recs?.length)return;S.cinvDone=S.month;
   try{const ex=await db.collection('cinv').where('month','==',S.month).get(),have=new Set(ex.docs.map(d=>d.id));for(const r of S.recs){if(r.status==='paid'||carriedTo(r)||have.has(cinvId(r)))continue;const c=cli(r.clientId);if(c&&cEmails(c).length&&grandTotal(r)>0)await issueCinv(r)}}catch(e){console.warn('cinv',e)}}
+// التيم: خد رأي العميل أو موافقته (الأكونتات اللي متوزعة عليك بس) + شات العميل
+function cwMineSub(){if(S.unsubCwM||!S.email)return;S.unsubCwM=db.collection('cwork').where('byEmail','==',S.email).onSnapshot(s=>{S.myCw=s.docs.map(d=>({id:d.id,...d.data(SNAP)})).sort((a,b)=>(b.at?.toMillis?.()||0)-(a.at?.toMillis?.()||0));rr()},e=>console.warn(e))}
+const bizAccs=()=>{const seen=new Set();return (S.chats||[]).filter(c=>c.client&&c.cid&&!seen.has(c.cid)&&seen.add(c.cid)).map(c=>({cid:c.cid,name:cli(c.cid)?.name||String(c.title||'').replace(/^Pensell · /,'')})).sort((a,b)=>a.name.localeCompare(b.name,'ar'))};
+function bizTeamBox(){const A=bizAccs();if(!A.length)return '';const M=(S.myCw||[]).filter(w=>w.kind==='ask').slice(0,6),sel=S.taC&&A.some(a=>a.cid===S.taC)?S.taC:A[0].cid,nm=id=>A.find(a=>a.cid===id)?.name||'';
+  return `<div class="panel stack" style="gap:10px"><h3>العملاء على «بيزنسي»</h3>
+   <select id="ta_c" aria-label="الأكونت">${A.map(a=>`<option value="${a.cid}" ${a.cid===sel?'selected':''}>${h(a.name)}</option>`).join('')}</select>
+   <div class="row" style="flex-wrap:wrap"><button class="btn primary" data-act="taAsk">خد رأي العميل / موافقته</button><button class="btn" data-act="cChat">💬 شات العميل</button></div>
+   ${M.length?`<div class="list">${M.map(w=>`<div class="item" style="align-items:flex-start"><div class="grow" style="min-width:0"><b>${h(w.title||'سؤال')}</b> <span class="small muted">· ${h(nm(w.cid)||cli(w.cid)?.name||'')}</span>
+     <div class="small">${w.status==='pending'?'<span class="muted">مستني رد العميل</span>':w.status==='approved'?'<span style="color:var(--good)">العميل وافق ✓</span>':`<span style="color:var(--gold)">العميل طلب تعديل:</span> ${linkify(w.reply||'')}`}</div></div>
+     ${w.status!=='pending'&&!w.handled?`<button class="btn sm" data-act="taSeen" data-id="${w.id}">تمام</button>`:''}</div>`).join('')}</div>`:''}</div>`}
+function sheetTAsk(cid){const A=bizAccs(),a=A.find(x=>x.cid===cid);if(!a)return;const E=S.edit?.kind==='task-ask'&&S.edit.cid===cid?S.edit:{kind:'task-ask',cid,t:'',d:'',l:'',files:[]};S.edit=E;
+  openSheet(`<div class="sheet-h"><div><h3>خد رأي العميل</h3><div class="small muted">${h(a.name)} · هيوصله على «بيزنسي» بزرارين: موافقة / طلب تعديل</div></div><button class="x" data-act="close" aria-label="قفل">×</button></div><div class="stack">
+   <div class="field"><label class="label" for="ta_t">العنوان</label><input id="ta_t" value="${h(E.t)}" placeholder="مثلاً: فكرة ريل العرض الجديد"></div>
+   <div class="field"><label class="label" for="ta_d">عايز رأيه أو موافقته على إيه؟</label><textarea id="ta_d" rows="4" placeholder="اكتب السؤال أو الكابشن أو الفكرة">${h(E.d)}</textarea></div>
+   <div class="field"><label class="label" for="ta_l">لينك (اختياري)</label><textarea id="ta_l" rows="2" dir="ltr" placeholder="لينك Drive أو أي لينك، كل لينك في سطر">${h(E.l)}</textarea></div>
+   <div class="field"><label class="label" for="ta_f">صور أو ملفات (اختياري)</label><input type="file" id="ta_f" multiple>${E.files.length?`<div class="small muted">${E.files.length} ملف: ${h(E.files.map(f=>f.name).join('، '))}</div>`:''}</div>
+   ${E.prog?`<div class="small">${h(E.prog)}</div>`:''}<button class="btn primary" data-act="taSend" style="justify-content:center" ${E.busy?'disabled':''}>ابعت للعميل</button></div>`)}
+function taRead(){const E=S.edit;if(E?.kind!=='task-ask')return;const g=id=>document.getElementById(id);if(g('ta_t'))E.t=g('ta_t').value;if(g('ta_d'))E.d=g('ta_d').value;if(g('ta_l'))E.l=g('ta_l').value}
 // من العملاء: طلبات، ردود على الشغل، وتحويلات مستنية تأكيد — للمدير والتيم ليدر
 function bizSubLead(){if(S.unsubBiz||!(S.fin||S.tl))return;S.unsubBiz=1;
   db.collection('creqs').onSnapshot(s=>{S.creqs=s.docs.map(d=>({id:d.id,...d.data(SNAP)})).sort((a,b)=>(b.at?.toMillis?.()||0)-(a.at?.toMillis?.()||0));rr()},err);
@@ -889,7 +908,7 @@ async function cinvPaidSync(X){try{const ref=db.doc('cinv/'+cinvId(X)),d=await r
 async function upTo(prefix,files,onp){const out=[];let i=0;for(const f of files){i++;const safe=(f.name||'file').replace(/[^\w.\-]+/g,'_').slice(-60),path=`${prefix}/${Date.now()}_${safe}`,ref=firebase.storage().ref(path);
     await new Promise((res,rej)=>{const t=ref.put(f,{contentType:f.type||'application/octet-stream'});t.on('state_changed',x=>onp&&onp(Math.round(x.bytesTransferred/(x.totalBytes||1)*100)),rej,res)});out.push({url:await ref.getDownloadURL(),name:f.name||safe,type:f.type||'',path})}return out}
 // العميل بيبلّغ المدير والتيم ليدر (طلب، رد على شغل، دفع، تقييم)
-function cAsk(t){if(!auth.currentUser)return;auth.currentUser.getIdToken().then(tok=>fetch(pushUrl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'cask',idToken:tok,cid:S.cid,t:String(t).slice(0,160)})})).catch(()=>{})}
+function cAsk(t,wid){if(!auth.currentUser)return;auth.currentUser.getIdToken().then(tok=>fetch(pushUrl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'cask',idToken:tok,cid:S.cid,t:String(t).slice(0,160),...(wid?{wid}:{})})})).catch(()=>{})}
 function startClient(){S.tab='biz';const c=S.cid;
   db.doc('cpub/'+c).onSnapshot(()=>{},()=>{});
   db.collection('cwork').where('cid','==',c).onSnapshot(s=>{S.cw=s.docs.map(d=>({id:d.id,...d.data(SNAP)})).sort((a,b)=>(b.at?.toMillis?.()||0)-(a.at?.toMillis?.()||0));rr()},err);
@@ -951,10 +970,10 @@ const tomorrow=()=>{const x=new Date(today()+'T12:00:00Z');x.setUTCDate(x.getUTC
 const myCrAccs=()=>{const m=today().slice(0,7),L=(S.myMine?.byMonth||{})[m]||[],seen=new Set();return L.filter(a=>a.r==='كريتور'&&a.cid&&!seen.has(a.cid)&&seen.add(a.cid)).map(a=>({cid:a.cid,name:a.c,dz:a.dz||''}))};
 function reqsSub(){if(!db||S.unsubRq)return;const q=isLead()?db.collection('reqs'):db.collection('reqs').where('see','array-contains',meEmail());
   S.unsubRq=q.onSnapshot(s=>{S.reqs=s.docs.map(d=>({id:d.id,...d.data(SNAP)})).sort((a,b)=>(b.at?.toMillis?.()||0)-(a.at?.toMillis?.()||0));if(S.edit?.kind==='req'){const r=S.reqs.find(x=>x.id===S.edit.id),j=JSON.stringify(r||null);if(j!==S.edit.j&&!S.edit.busy){rqdRead();sheetReq(S.edit.id)}}rr()},err)}
-function rqdRead(){const E=S.edit;if(!E||E.kind!=='req')return;const l=document.getElementById('rqd_l'),nn=document.getElementById('rqd_n');if(l)E.links=l.value;if(nn)E.note=nn.value}
+function rqdRead(){const E=S.edit;if(!E||E.kind!=='req')return;const l=document.getElementById('rqd_l'),nn=document.getElementById('rqd_n'),cc=document.getElementById('rqd_c'),sc=document.getElementById('rqs_cap'),sl=document.getElementById('rqs_l');if(l)E.links=l.value;if(nn)E.note=nn.value;if(cc)E.cap=cc.value;if(sc)E.scap=sc.value;if(sl)E.slinks=sl.value}
 const rqPush=(id,ev)=>{if(!auth.currentUser)return;auth.currentUser.getIdToken().then(t=>fetch(pushUrl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'req',idToken:t,id,ev})})).catch(()=>{})};
 const rqCard=r=>{const st=RQ_S[r.status]||RQ_S.pending,to=rqPerson(r.to)?.name||r.toName||'';
-  return `<div class="item" style="align-items:flex-start"><div class="grow" style="min-width:0"><b>${h(r.title||RQ_T[r.type]?.n)}</b> <span class="pill ${st[1]}">${st[0]}</span>
+  return `<div class="item" style="align-items:flex-start"><div class="grow" style="min-width:0"><b>${h(r.title||RQ_T[r.type]?.n)}</b> <span class="pill ${st[1]}">${st[0]}</span>${r.sendPend?' <span class="pill unpaid">مستني يتبعت للعميل</span>':''}
    <div class="small muted">${h(r.cname||'')} · ${h(RQ_T[r.type]?.n||'')}${to?' · لـ '+h(to):''}${r.due?' · '+rqDay(r.due):''}</div></div><button class="btn sm ${(isLead()&&['pending','review'].includes(r.status))||(r.to===S.me?.id&&['todo','changes'].includes(r.status))?'primary':''}" data-act="rqOpen" data-id="${r.id}">افتح</button></div>`};
 // تبويب «الطلبات» للمدير والتيم ليدر
 function vReqs(){const L=S.reqs||[],f=S.rqF||'act',acc=S.rqA||'';
@@ -981,7 +1000,7 @@ function leadReqsPanel(){if(!isLead())return '';const L=S.reqs||[],f=S.rqF||'act
    ${list.length?`<div class="list">${list.slice(0,30).map(rqCard).join('')}</div>`:`<p class="small muted" style="margin:0">${f==='act'?'مفيش طلبات مستنياك دلوقتي.':'مفيش طلبات هنا.'}</p>`}</div>`}
 // في «صفحتي»: المطلوب منك، وأكونتاتك (للكريتور)، وطلباتك
 function reqsPanel(){const me=S.me;if(!me)return '';const L=S.reqs||[];
-  const mine=L.filter(r=>r.to===me.id&&['todo','changes'].includes(r.status)),asked=L.filter(r=>r.by===me.id&&!['done','rejected'].includes(r.status)),accs=has(me,'creator')?myCrAccs():[];
+  const mine=L.filter(r=>(r.to===me.id&&['todo','changes'].includes(r.status))||(r.sendPend&&r.sendTo===me.id)),asked=L.filter(r=>r.by===me.id&&!['done','rejected'].includes(r.status)),accs=has(me,'creator')?myCrAccs():[];
   if(!mine.length&&!asked.length&&!accs.length)return '';
   return `<div class="panel stack" style="gap:10px"><div class="row between"><h3>الطلبات</h3>${mine.length?`<span class="pill red">${mine.length} مطلوب منك</span>`:''}</div>
    ${mine.length?`<div><div class="label" style="margin-bottom:4px">مطلوب منك</div><div class="list">${mine.map(rqCard).join('')}</div></div>`:''}
@@ -1027,11 +1046,16 @@ async function rqUnTask(r){for(const d of [...new Set([r.due,today()].filter(Boo
 async function rqMarkTask(r,patch){for(const d of [...new Set([r.due,today()].filter(Boolean))]){const ref=db.doc('tasks/'+r.to+'_'+d),s=await ref.get();if(!s.exists)continue;const it=s.data().items||[];if(!it.some(i=>i.id==='rq_'+r.id))continue;
     await ref.update({items:it.map(i=>i.id==='rq_'+r.id?{...i,...patch}:i)})}}
 // لما المدير يوافق على التسليم: بيتسجّل «تم فعلاً» في المتابعة اليومية النهارده
+// مين يبعت البوست كامل للعميل: الكريتور اللي طلب، أو كريتور الأكونت
+function rqSender(r){const by=S.emps.find(e=>e.id===r.by);if(by&&has(by,'creator')&&by.email)return by;const A=S.asg?.[r.cid],cr=(A?.creator||[]).slice(-1)[0]?.e,e=S.emps.find(x=>x.id===cr);return e&&e.email?e:null}
+async function rqSendTask(r,eid){const d=today(),ref=db.doc('tasks/'+eid+'_'+d),s=await ref.get(),x=s.exists?s.data():{emp:eid,date:d,items:[],msg:'',byName:'Pensell'},tid='rqs_'+r.id;
+  const items=(x.items||[]).filter(i=>i.id!==tid);items.push({id:tid,k:'rq',rq:r.id,t:'ابعت البوست كامل للعميل: '+rqLabel(r),done:false});await ref.set({...x,items})}
+async function rqSendDone(r){for(const d of [...new Set([r.doneDay,today()].filter(Boolean))]){const ref=db.doc('tasks/'+r.sendTo+'_'+d),s=await ref.get();if(!s.exists)continue;const it=s.data().items||[];if(it.some(i=>i.id==='rqs_'+r.id))await ref.update({items:it.map(i=>i.id==='rqs_'+r.id?{...i,done:true}:i)})}}
 async function rqToAtt(r){const T=RQ_T[r.type];if(!T.k)return;const d=today(),ref=db.doc('attendance/'+d),s=await ref.get(),x=s.exists?s.data():{date:d,rows:{},auto:true},id='rq_'+r.id;
   const L=(x[T.k]||[]).filter(e=>e.id!==id);
   L.push(T.k==='designs'?{id,e:r.to,a:r.cid,t:'ديزاين',n:1,ok:true,...(r.title?{idea:r.title}:{})}:T.k==='edits'?{id,e:r.to,a:r.cid,n:Math.max(1,+r.n||1),ok:true}:{id,e:r.to,a:r.cid,amt:+r.amt||0,ok:true,...((r.dLinks||[])[0]?{link:r.dLinks[0]}:{})});
   await ref.set({...x,[T.k]:L})}
-function sheetReq(id,keep){const r=(S.reqs||[]).find(x=>x.id===id);if(!r)return;const prev=S.edit?.kind==='req'&&S.edit.id===id?S.edit:null;S.edit={kind:'req',id,view:1,j:JSON.stringify(r),files:prev?.files||[],links:prev?.links||'',note:prev?.note||'',prog:prev?.prog||''};const E=S.edit;
+function sheetReq(id,keep){const r=(S.reqs||[]).find(x=>x.id===id);if(!r)return;const prev=S.edit?.kind==='req'&&S.edit.id===id?S.edit:null;S.edit={kind:'req',id,view:1,j:JSON.stringify(r),files:prev?.files||[],links:prev?.links||'',note:prev?.note||'',prog:prev?.prog||'',cap:prev?.cap,scap:prev?.scap,slinks:prev?.slinks};const E=S.edit;
   const lead=isLead(),amTo=r.to===S.me?.id,st=RQ_S[r.status]||RQ_S.pending,to=rqPerson(r.to)?.name||r.toName||'';
   const canDeliver=amTo&&['todo','changes'].includes(r.status);
   openSheet(`<div class="sheet-h"><div><h3>${h(r.title||RQ_T[r.type]?.n)}</h3><div class="small muted">${h(r.cname||'')} · ${h(RQ_T[r.type]?.n||'')}</div></div><button class="x" data-act="close" aria-label="قفل">×</button></div><div class="stack">
@@ -1039,14 +1063,18 @@ function sheetReq(id,keep){const r=(S.reqs||[]).find(x=>x.id===id);if(!r)return;
    ${r.desc?`<div style="white-space:pre-wrap">${linkify(r.desc)}</div>`:''}
    ${(r.refs||[]).length||(r.links||[]).length?`<div><div class="label" style="margin-bottom:6px">الريفرنس</div><div class="rq-grid">${(r.refs||[]).map(f=>rqThumb(f)).join('')}</div>${(r.links||[]).map(u=>`<div class="small">${linkify(u)}</div>`).join('')}</div>`:''}
    ${r.rev&&r.status==='changes'?`<div class="notice" style="margin:0"><b>التعديل المطلوب:</b> ${linkify(r.rev)}</div>`:''}
-   ${(r.deliver||[]).length||(r.dLinks||[]).length||r.dNote?`<div class="panel" style="border-color:var(--good)"><div class="label" style="margin-bottom:6px">التسليم</div><div class="rq-grid">${(r.deliver||[]).map(f=>rqThumb(f)).join('')}</div>${(r.dLinks||[]).map(u=>`<div class="small">${linkify(u)}</div>`).join('')}${r.dNote?`<div class="small" style="margin-top:4px;white-space:pre-wrap">${linkify(r.dNote)}</div>`:''}</div>`:''}
+   ${(r.deliver||[]).length||(r.dLinks||[]).length||r.dNote?`<div class="panel" style="border-color:var(--good)"><div class="label" style="margin-bottom:6px">التسليم</div><div class="rq-grid">${(r.deliver||[]).map(f=>rqThumb(f)).join('')}</div>${(r.dLinks||[]).map(u=>`<div class="small">${linkify(u)}</div>`).join('')}${r.dNote?`<div class="small" style="margin-top:4px;white-space:pre-wrap">${linkify(r.dNote)}</div>`:''}${r.dCap?`<div style="margin-top:8px"><div class="label">الكابشن</div><div style="white-space:pre-wrap">${linkify(r.dCap)}</div></div>`:''}</div>`:''}
+   ${r.status==='done'&&r.sendPend&&(r.sendEmail===meEmail()||lead)?`<div class="panel stack" style="gap:8px;border-color:var(--accent)"><h3>ابعت البوست كامل للعميل</h3><p class="small muted" style="margin:0">الشغل اتوافق عليه. راجع الكابشن وابعته للعميل على «بيزنسي» مع ${r.type==='video'?'لينك الفيديو':'الديزاين'}.</p>
+     <textarea id="rqs_cap" rows="4" placeholder="الكابشن">${h(E.scap??r.dCap??r.dNote??'')}</textarea><textarea id="rqs_l" rows="2" dir="ltr" placeholder="لينك Drive (لو فيديو)">${h(E.slinks??(r.dLinks||[]).join('\n'))}</textarea>
+     <button class="btn primary" data-act="rqSendC" style="justify-content:center">ابعته للعميل ✓</button></div>`:''}
    ${canDeliver?`<div class="panel stack" style="gap:8px"><h3>سلّم الشغل</h3><input type="file" id="rqd_files" multiple>${E.files.length?`<div class="small muted">${E.files.length} ملف: ${h(E.files.map(f=>f.name).join('، '))}</div>`:''}
      <p class="small muted" style="margin:0">ارفع الديزاين أو الصور بجودتها الأصلية. الفيديوهات حطها على Drive وحط اللينك.</p>
-     <textarea id="rqd_l" rows="2" dir="ltr" placeholder="لينك Drive أو أي لينك، كل لينك في سطر">${h(E.links)}</textarea><input id="rqd_n" value="${h(E.note)}" placeholder="ملاحظة (اختياري)">${E.prog?`<div class="small">${h(E.prog)}</div>`:''}
+     <textarea id="rqd_l" rows="2" dir="ltr" placeholder="لينك Drive أو أي لينك، كل لينك في سطر">${h(E.links)}</textarea>${['design','video'].includes(r.type)?`<textarea id="rqd_c" rows="3" placeholder="كابشن البوست / الريل (اللي هيتنشر مع الشغل)">${h(E.cap??r.dCap??'')}</textarea>`:''}<input id="rqd_n" value="${h(E.note)}" placeholder="ملاحظة (اختياري)">${E.prog?`<div class="small">${h(E.prog)}</div>`:''}
      <button class="btn primary" data-act="rqDeliver" style="justify-content:center" ${E.busy?'disabled':''}>سلّمت · ابعت للمراجعة</button></div>`:''}
    ${lead&&!['done','rejected'].includes(r.status)?`<div><button class="btn sm" data-act="rqEdit">✏️ تعديل الطلب</button></div>`:''}
    ${lead&&r.status==='pending'?`<div class="row"><button class="btn primary" data-act="rqApprove">Approve · حوّلها مهمة</button><button class="btn" data-act="rqReject">ارفض</button></div>`:''}
-   ${lead&&r.status==='review'?`<div class="stack" style="gap:8px">${cEmails(cli(r.cid)).length?`<label class="row" style="gap:6px"><input type="checkbox" id="rq_send" checked> ابعته للعميل على «بيزنسي» يبص عليه</label><input id="rq_cap" value="${h(r.dNote||'')}" placeholder="الكابشن أو ملاحظة للعميل">`:''}<div class="row"><button class="btn good" data-act="rqDone">Approve · تم ✓</button></div><div class="row" style="flex-wrap:nowrap"><input id="rq_rev" placeholder="لو محتاج تعديل اكتبه هنا" style="flex:1"><button class="btn" data-act="rqChanges">اطلب تعديل</button></div></div>`:''}
+   ${lead&&r.status==='review'?`<div class="stack" style="gap:8px">${cEmails(cli(r.cid)).length?`<div class="stack" style="gap:6px"><div class="label">بعد الموافقة</div><label style="display:flex;gap:8px;align-items:center;cursor:pointer"><input type="radio" style="width:auto;flex:none;margin:0" name="rq_to" value="now" checked> ابعته للعميل دلوقتي مع الكابشن</label>${rqSender(r)?`<label style="display:flex;gap:8px;align-items:center;cursor:pointer"><input type="radio" style="width:auto;flex:none;margin:0" name="rq_to" value="cr"> ${h(rqSender(r).name)} يبعت البوست كامل للعميل (مهمة)</label>`:''}<label style="display:flex;gap:8px;align-items:center;cursor:pointer"><input type="radio" style="width:auto;flex:none;margin:0" name="rq_to" value="no"> مش هيتبعت للعميل</label>
+     <textarea id="rq_cap" rows="3" placeholder="الكابشن أو ملاحظة للعميل">${h(r.dCap||r.dNote||'')}</textarea></div>`:''}<div class="row"><button class="btn good" data-act="rqDone">Approve · تم ✓</button></div><div class="row" style="flex-wrap:nowrap"><input id="rq_rev" placeholder="لو محتاج تعديل اكتبه هنا" style="flex:1"><button class="btn" data-act="rqChanges">اطلب تعديل</button></div></div>`:''}
    ${lead||(r.by===S.me?.id&&r.status==='pending')?`<div class="row"><button class="btn sm danger" data-act="delAsk" data-what="req">مسح الطلب</button></div><div id="delZone"></div>`:''}</div>`)}
 function wsInbox(){const L=S.wsSubs||[];if(!L.length)return '';
   return `<div class="panel" style="border-color:var(--accent)"><h3>🌟 شغل مقترح من التيم · ${L.length}</h3><div class="stack" style="gap:10px;margin-top:8px">${L.map(x=>`<div class="en-row">${x.img?`<img src="${x.img}" alt="" style="max-height:180px;border-radius:10px;object-fit:contain">`:''}
@@ -1064,7 +1092,7 @@ function outGate(e){const hr=has(e,'moderator')?23:20,now=new Date(),it=(S.myTas
 function vCheckin(){
   if(!S.empsLoaded)return `<div class="empty"><h3>بيحمّل…</h3></div>`;
   const e=S.me;
-  if(!e&&(S.fin||S.tl))return `<div class="stack" style="max-width:520px;margin:0 auto">${bellBar()}${clientInbox()}${asksInbox()}${leadReqsPanel()}${notifBanner()}</div>`;
+  if(!e&&(S.fin||S.tl))return `<div class="stack" style="max-width:520px;margin:0 auto">${bellBar()}${clientInbox()}${asksInbox()}${leadReqsPanel()}${bizTeamBox()}${notifBanner()}</div>`;
   if(!e)return `<div class="panel empty" style="max-width:460px;margin:0 auto"><h3>إيميلك مش متسجّل عندنا</h3><p>انت داخل بـ <b dir="ltr">${h(S.email)}</b>. ابعت الإيميل ده للإدارة علشان يضيفوه لاسمك، وبعدين افتح اللينك تاني.</p></div>`;
   const d=today(),p=(S.myLog||{})[d]||{},m=d.slice(0,7);
   const days=Object.entries(S.myLog||{}).filter(([k])=>k.startsWith(m)).sort((a,b)=>b[0].localeCompare(a[0]));
@@ -1093,7 +1121,7 @@ function vCheckin(){
    ${planDueBox(e,acc,m)}${repDue(e,acc,m)}
    <div class="panel"><div class="row between"><h3>مهام النهارده</h3>${items.length?`<span class="pill ${doneN===items.length?'paid':'unpaid'}">${doneN} من ${items.length}</span>`:''}</div>
     ${items.length?`<div class="list" style="margin-top:6px">${items.map((x,i)=>`<label class="item" style="cursor:pointer;gap:10px;align-items:flex-start"><input type="checkbox" data-act="taskDone" data-i="${i}" ${x.done?'checked':''} style="margin-top:4px"><span class="grow" style="min-width:0"><span style="${x.done?'text-decoration:line-through;color:var(--muted)':''}">${h(x.t)}</span>${x.link?`<div class="small" style="overflow-wrap:anywhere"><a href="${h(x.link)}" target="_blank" rel="noopener" dir="ltr">${h(x.link)}</a></div>`:''}${x.note?`<div class="small muted" style="white-space:pre-wrap;overflow-wrap:anywhere">${linkify(x.note)}</div>`:''}${x.rq?`<div><button class="btn xs" data-act="rqOpen" data-id="${x.rq}" style="margin-top:4px">افتح الطلب</button></div>`:''}${x.ok===true?'<div class="small" style="color:var(--good)">التيم ليدر أكّد إنها تمت ✓</div>':x.ok===false&&x.byEmp?`<div class="small" style="color:var(--gold)">متمّتش بسبب تأخير من ${h(x.byEmp)}${x.why?' ('+h(x.why)+')':''} · مش هتتخصم منك</div>`:x.ok===false?`<div class="small" style="color:var(--bad)">التيم ليدر علّم إنها متمّتش${x.why?' · '+h(x.why):''}</div>`:''}</span></label>`).join('')}</div>`:'<p class="small muted" style="margin:6px 0 0">مفيش مهام متسجّلة ليك النهارده.</p>'}</div>
-   ${reqsPanel()}
+   ${reqsPanel()}${bizTeamBox()}
    ${has(e,'moderator')?modPanel(p):''}
    ${askBox()}
    <div class="panel"><h3>أكونتاتك في ${mName(m)}</h3>${acc.length?`<div class="list" style="margin-top:6px">${acc.map(a=>{const rp=a.cid&&a.r==='كريتور'?S.myReps?.[repId(m,a.cid,e.id)]:null;return `<div class="item"><div class="grow" style="min-width:0"><b>${h(a.c)}</b> <span class="pkg on">${h(a.r)}</span>${a.from>1||a.to?` <span class="small muted">من يوم ${a.from||1}${a.to?' لـ '+a.to:''}</span>`:''}</div>${a.cid?`<div class="row" style="gap:4px"><button class="btn xs" data-act="briefView" data-c="${a.cid}" data-n="${h(a.c)}">بريف</button><button class="btn xs ${a.r==='كريتور'&&S.myPlans?.[planId(m,a.cid)]?.status!=='sent'?'primary':''}" data-act="planOpen" data-c="${a.cid}" data-n="${h(a.c)}" data-r="${h(a.r)}">${S.myPlans?.[planId(m,a.cid)]?.status==='sent'?'خطة الشهر ✓':'خطة الشهر'}</button>${a.r==='كريتور'?`<button class="btn xs ${rp?.status==='sent'?'':'primary'}" data-act="repOpen" data-c="${a.cid}" data-n="${h(a.c)}">${rp?.status==='sent'?'تقرير الشهر ✓':'تقرير الشهر'}</button>`:''}</div>`:''}</div>`}).join('')}</div>`:'<p class="small muted" style="margin:6px 0 0">لسه مفيش أكونتات متوزعة عليك الشهر ده.</p>'}</div>
@@ -1163,7 +1191,7 @@ function vToday(){const d=S.attDate,list=S.emps.filter(e=>!isOwnerEmp(e)),fri=is
      ${it.length?`<tr class="sub"><td colspan="3"><div class="today-it">${it.map(x=>`<span class="${x.done?'ok':''} ${x.ok===false?'no':''}">${x.done?'✓':'○'} ${h(x.t)}${x.ok===false?' · متمّتش':''}</span>`).join('')}</div></td></tr>`:''}`).join('')}
   </tbody></table></div></div>
   <div class="panel stack" style="gap:8px"><h3>📣 ابعت إشعار</h3>
-   <div class="field"><label class="label" for="nt_to">لمين</label><select id="nt_to"><option value="team">التيم كله</option>${list.filter(e=>e.email).map(e=>`<option value="${h(cleanEmail(e.email))}">${h(e.name)}</option>`).join('')}</select></div>
+   <div class="field"><label class="label" for="nt_to">لمين</label><select id="nt_to"><optgroup label="التيم"><option value="team">التيم كله</option>${list.filter(e=>e.email).map(e=>`<option value="${h(cleanEmail(e.email))}">${h(e.name)}</option>`).join('')}</optgroup>${(()=>{const C=(S.clients||[]).filter(c=>c.active!==false&&cEmails(c).length);return C.length?`<optgroup label="العملاء على «بيزنسي»"><option value="c:all">كل العملاء (${C.length})</option>${C.map(c=>`<option value="c:${c.id}">${h(c.name)}</option>`).join('')}</optgroup>`:''})()}</select></div>
    <textarea id="nt_t" rows="2" placeholder="الرسالة، مثلاً: ميتنج الساعة 3 / متنسوش تقفلوا مهام النهارده"></textarea>
    <div><button class="btn primary" data-act="sendNotif">ابعت الإشعار</button></div>
    <p class="small muted" style="margin:0">الإشعار بيوصل للي مفعّل الإشعارات على موبايله أو الكمبيوتر.</p></div>
@@ -1874,7 +1902,7 @@ function drawRec(){
   const mp={...F.mgmtPct,...m.pct},pp=photoP(ph),nSes=photoSessions({...S.edit.rec,clientId}).length;
   openSheet(`<div class="sheet-h"><div><h3>${h(c.name)}</h3><div class="small muted">${mName(S.month)}</div></div><button class="x" data-act="close" aria-label="قفل">×</button></div>
   <div class="stack">
-   <div class="sec"><h4>بيانات العميل</h4><div class="grid2" style="margin-top:6px"><div class="field"><label class="label" for="rc_name">اسم العميل / البراند</label><input id="rc_name" value="${h(S.edit.cName??c.name)}"></div><div class="field"><label class="label" for="rc_phone">رقم الواتساب</label><input id="rc_phone" inputmode="tel" value="${h(S.edit.cPhone??c.phone??'')}" placeholder="010xxxxxxxx"></div></div></div>
+   <div class="sec"><h4>بيانات العميل</h4><div class="grid2" style="margin-top:6px"><div class="field"><label class="label" for="rc_name">اسم العميل / البراند</label><input id="rc_name" value="${h(S.edit.cName??c.name)}"></div><div class="field"><label class="label" for="rc_phone">رقم الواتساب</label><input id="rc_phone" inputmode="tel" value="${h(S.edit.cPhone??c.phone??'')}" placeholder="010xxxxxxxx"></div></div><div class="field" style="margin-top:8px"><label class="label" for="rc_emails">إيميلات جوجل للدخول على «بيزنسي»</label><textarea id="rc_emails" rows="2" dir="ltr" placeholder="owner@gmail.com">${h((S.edit.cEmails??cEmails(c)).join('\n'))}</textarea><p class="small muted" style="margin:0">كل إيميل في سطر. العميل بيدخل بيه من «تسجيل الدخول» في الموقع.</p></div></div>
    <div class="sec ${m.on?'':'off'}"><div class="sec-h"><label><input type="checkbox" id="m_on" ${m.on?'checked':''} data-act="togPkg"> باقة الإدارة</label>${m.on?`<div style="width:150px"><input id="m_price" type="number" min="0" value="${m.price||''}" placeholder="سعر الباقة" aria-label="سعر باقة الإدارة"></div>`:''}</div>
    ${m.on?`<div class="stack" style="margin-top:12px;gap:10px">
      <div class="grid3"><div class="field"><label class="label" for="mn_p">حد أدنى بوستات</label><input id="mn_p" type="number" min="0" value="${m.min?.posts??''}" placeholder="${F.minPosts??15}"></div>
@@ -1914,7 +1942,7 @@ const salesSel=(id,val,role)=>{const exts=[...new Set([...S.recs.flatMap(r=>[r.m
   const o=(vv,lbl)=>`<option value="${h(vv)}" ${val===vv?'selected':''}>${h(lbl)}</option>`;
   return `<select id="${id}" data-sales="1"><option value="">—</option><optgroup label="من الفريق">${(role?[...S.emps.filter(e=>has(e,role)),...S.emps.filter(e=>!has(e,role))]:S.emps).map(e=>o(e.id,e.name)).join('')}</optgroup>${exts.length?`<optgroup label="من برا">${exts.map(x=>o('ext:'+x,x)).join('')}</optgroup>`:''}${cl.length?`<optgroup label="عميل">${cl.map(c=>o('ext:'+c.name,c.name)).join('')}</optgroup>`:''}<option value="__new">+ اسم تاني…</option></select><input id="${id}_x" placeholder="اسم السيلز" hidden style="margin-top:6px">`};
 function readRec(){
-  const{rec}=S.edit,m=rec.mgmt,ph=rec.photo,F=S.F,q=id=>document.getElementById(id);if(q('rc_name')){S.edit.cName=v('rc_name');S.edit.cPhone=v('rc_phone')}
+  const{rec}=S.edit,m=rec.mgmt,ph=rec.photo,F=S.F,q=id=>document.getElementById(id);if(q('rc_name')){S.edit.cName=v('rc_name');S.edit.cPhone=v('rc_phone');if(q('rc_emails'))S.edit.cEmails=parseEmails(q('rc_emails').value)}
   if(q('m_price')){m.price=n('m_price');m.desc=v('m_desc');{const mn={};[['posts','mn_p'],['stories','mn_s'],['designs','mn_d']].forEach(([k,id])=>{const x=v(id);if(x!=='')mn[k]=+x});m.min=mn}m.team={...(m.team||{})};{const x=sv('mt_sales');if(x)m.team.sales=x;else delete m.team.sales}
     m.pct={};Object.keys(MG).forEach(k=>{const x=q('mpc_'+k);if(x&&+x.value!==+F.mgmtPct[k])m.pct[k]=+x.value||0})}
   if(q('p_price')){ph.price=n('p_price');ph.desc=v('p_desc');ph.sessions=ph.sessions.map((_,i)=>({e:v('ses_'+i),d:v('sesd_'+i)}));ph.pv=2;ph.edits=ph.edits.map((_,i)=>({e:v('ed_e_'+i),v:n('ed_v_'+i)}));ph.sales=sv('p_sales');
@@ -2074,6 +2102,8 @@ document.addEventListener('change',e=>{
   if(t.id==='cr_files'){const F=S.crF;if(F){F.details=v('cr_d');F.link=v('cr_l');F.files=[...t.files].slice(0,10);render()}return}
   if(t.id==='rq_c'){rqRead();S.edit.to=rqDefTo(S.edit.type,S.edit.cid);sheetReqNew();return}
   if(t.id==='rq_files'){rqRead();S.edit.files=[...t.files].slice(0,20);sheetReqNew();return}
+  if(t.id==='ta_f'){taRead();if(S.edit?.kind==='task-ask'){S.edit.files=[...t.files].slice(0,10);sheetTAsk(S.edit.cid)}return}
+  if(t.id==='ta_c'){S.taC=t.value;return}
   if(t.id==='rqd_files'){rqdRead();S.edit.files=[...t.files].slice(0,20);sheetReq(S.edit.id);return}
   if(t.id==='rqAcc'){S.rqA=t.value;render();return}
   if(t.id==='fr_c'){document.getElementById('fr_xw').hidden=t.value!=='__ext';if(t.value==='__ext')document.getElementById('fr_xn').focus()}
@@ -2105,11 +2135,12 @@ document.addEventListener('click',async e=>{
   if(a==='addEd'){readRec();S.edit.rec.photo.edits.push({e:'',v:''});drawRec();return}
   if(a==='rmEd'){readRec();S.edit.rec.photo.edits.splice(+b.dataset.i,1);drawRec();return}
   if(a==='saveRec'){readRec();const{rec,clientId}=S.edit,c=cli(clientId);const nm=(S.edit.cName??c.name).trim();if(!nm)return toast('اكتب اسم العميل');
+    const oldE=cEmails(c),newE=S.edit.cEmails??oldE,empE=newE.find(e=>S.emps.some(x=>cleanEmail(x.email||'')===e));if(empE)return toast(`${empE} إيميل موظف، مينفعش يبقى إيميل عميل`);const chE=newE.join()!==oldE.join();
     if(rec.mgmt.on&&!rec.mgmt.price)return toast('اكتب سعر باقة الإدارة');if(rec.photo.on&&!rec.photo.price)return toast('اكتب سعر باقة التصوير');
     rec.photo.sessions=rec.photo.sessions.map(sesNorm).filter(x=>x.e||x.d);rec.photo.edits=rec.photo.edits.filter(x=>x.e);
     const id=S.month+'_'+clientId,body={...rec,month:S.month,clientId,clientName:c.name,no:rec.no||`${S.month.slice(2).replace('-','')}-${String(c.code||1).padStart(3,'0')}`,status:rec.status||'unpaid'};delete body.id;
     body.clientName=nm;const mn=rec.mgmt?.on?rec.mgmt.min||{}:{},q={posts:+(mn.posts??S.F.minPosts??15),stories:+(mn.stories??S.F.minStories??10),designs:+(mn.designs??S.F.designTarget??8)};
-    if(await save(()=>{const bt=db.batch();bt.set(db.doc('fin/main').collection('invoices').doc(id),body);if(nm!==c.name||(S.edit.cPhone??c.phone)!==c.phone)bt.update(db.doc('clients/'+clientId),{name:nm,phone:S.edit.cPhone??c.phone??''});if(rec.mgmt?.on)bt.set(db.doc('briefs/'+clientId),{cid:clientId,q,qMonth:S.month},{merge:true});return bt.commit()},'اتحفظ'))closeSheet();return}
+    if(await save(()=>{const bt=db.batch();bt.set(db.doc('fin/main').collection('invoices').doc(id),body);if(nm!==c.name||(S.edit.cPhone??c.phone)!==c.phone)bt.update(db.doc('clients/'+clientId),{name:nm,phone:S.edit.cPhone??c.phone??''});if(chE)bt.update(db.doc('clients/'+clientId),{emails:newE});if(rec.mgmt?.on)bt.set(db.doc('briefs/'+clientId),{cid:clientId,q,qMonth:S.month},{merge:true});return bt.commit().then(()=>chE||(nm!==c.name&&newE.length)?syncClientAccess(clientId,newE,oldE,nm):0)},'اتحفظ'))closeSheet();return}
   if(a==='startMonth'){b.disabled=true;const pm=prevMonth(S.month);const snap=await db.doc('fin/main').collection('invoices').where('month','==',pm).get();let k=0;
     for(const d of snap.docs){const p=d.data();if(S.recs.some(r=>r.clientId===p.clientId))continue;const c=cli(p.clientId);if(!c||c.active===false)continue;
       const body={month:S.month,clientId:p.clientId,clientName:c.name,no:`${S.month.slice(2).replace('-','')}-${String(c.code||1).padStart(3,'0')}`,status:'unpaid',discount:0,adds:[],subs:[],
@@ -2117,7 +2148,7 @@ document.addEventListener('click',async e=>{
       if(await save(()=>db.doc('fin/main').collection('invoices').doc(S.month+'_'+p.clientId).set(body)))k++}
     toast(k?`اتجهّز ${k} أكونت بباقة الإدارة. ضيف التصوير لما يحصل`:'مفيش أكونتات في الشهر اللي فات تتنقل');b.disabled=false;return}
   if(a==='saveClient'){const name=v('c_name');if(!name)return toast('اكتب اسم العميل');const phone=v('c_phone'),id=S.edit.id||uid(),isNew=!S.edit.id,old=isNew?[]:cEmails(cli(id));
-    const emails=[...new Set((document.getElementById('c_emails')?.value||'').split(/[\s,;]+/).map(cleanEmail).filter(x=>/^[^@]+@[^@]+\.[^@]+$/.test(x)))];
+    const emails=parseEmails(document.getElementById('c_emails')?.value);
     const emp1=emails.find(e=>S.emps.some(x=>cleanEmail(x.email||'')===e));if(emp1)return toast(`${emp1} إيميل موظف، مينفعش يبقى إيميل عميل`);
     if(await save(async()=>{await db.doc('clients/'+id).set(isNew?{name,phone,emails,active:true,code:Math.max(0,...S.clients.map(c=>c.code||0))+1}:{name,phone,emails},{merge:true});if(emails.length||old.length)await syncClientAccess(id,emails,old,name)},'اتحفظ'))closeSheet();return}
   if(a==='login'){const pr=new firebase.auth.GoogleAuthProvider();pr.setCustomParameters({prompt:'select_account'});try{await auth.signInWithPopup(pr)}catch(e){if(e.code!=='auth/popup-closed-by-user'&&e.code!=='auth/cancelled-popup-request')loginErr(e)}return}
@@ -2284,24 +2315,36 @@ document.addEventListener('click',async e=>{
     let ok=false;
     if(a==='rqApprove'){ok=await save(async()=>{await db.doc('reqs/'+r.id).update({status:'todo',apBy:nm});await rqToTask(r)},'اتوافق واتحول مهمة ✓');if(ok)cNote(r.cid,'المدير وافق على الريفرنس، وبدأنا الشغل')}
     if(a==='rqReject')ok=await save(()=>db.doc('reqs/'+r.id).update({status:'rejected',apBy:nm}),'اترفض');
-    if(a==='rqDone'){const toC=document.getElementById('rq_send')?.checked,cap=v('rq_cap');ok=await save(async()=>{await db.doc('reqs/'+r.id).update({status:'done',doneDay:today(),apBy:nm,...(toC?{sentC:true}:{})});await rqToAtt(r);await rqMarkTask(r,{done:true,ok:true})},'تم ✓ واتسجّل في المتابعة اليومية');
-      if(ok){if(toC)await sendWork({cid:r.cid,rq:r.id,kind:r.type,title:r.title||RQ_T[r.type]?.n||'',caption:cap,files:(r.deliver||[]).map(f=>({url:f.url,name:f.name,type:f.type})),links:r.dLinks||[],...(r.type==='ads'?{amt:+r.amt||0}:{})}).catch(err);else cNote(r.cid,'وافق المدير على الشغل')}}
+    if(a==='rqDone'){const how=document.querySelector('input[name=rq_to]:checked')?.value||'no',toC=how==='now',cap=v('rq_cap'),snd=how==='cr'?rqSender(r):null,se=snd?cleanEmail(snd.email||''):'';
+      ok=await save(async()=>{await db.doc('reqs/'+r.id).update({status:'done',doneDay:today(),apBy:nm,...(toC?{sentC:true}:{}),...(snd?{sendPend:true,sendTo:snd.id,sendEmail:se,dCap:cap,see:firebase.firestore.FieldValue.arrayUnion(se)}:{})});await rqToAtt(r);await rqMarkTask(r,{done:true,ok:true});if(snd)await rqSendTask(r,snd.id)},'تم ✓ واتسجّل في المتابعة اليومية');
+      if(ok&&snd){cNote(r.cid,'وافق المدير على الشغل، وهيوصلك قريب');rqPush(r.id,'send')}
+      else if(ok){if(toC)await sendWork({cid:r.cid,rq:r.id,kind:r.type,title:r.title||RQ_T[r.type]?.n||'',caption:cap,files:(r.deliver||[]).map(f=>({url:f.url,name:f.name,type:f.type})),links:r.dLinks||[],...(r.type==='ads'?{amt:+r.amt||0}:{})}).catch(err);else cNote(r.cid,'وافق المدير على الشغل')}}
     if(a==='rqChanges'){const note=v('rq_rev');if(!note){b.disabled=false;return toast('اكتب التعديل المطلوب')}ok=await save(async()=>{await db.doc('reqs/'+r.id).update({status:'changes',rev:note});await rqToTask(r,today(),'تعديل: ')},'التعديل اتبعت')}
     if(ok){rqPush(r.id,{rqApprove:'todo',rqDone:'done',rqChanges:'changes'}[a]||'');closeSheet()}else b.disabled=false;return}
+  if(a==='taAsk'){const c=document.getElementById('ta_c')?.value;if(!c)return;S.taC=c;S.edit=null;return sheetTAsk(c)}
+  if(a==='cChat'){const c=document.getElementById('ta_c')?.value;if(!c)return;S.taC=c;S.prevTab=S.tab;S.tab='chat';window.scrollTo(0,0);return openChat('c_'+c)}
+  if(a==='taSeen'){await save(()=>db.doc('cwork/'+b.dataset.id).update({handled:true}));return}
+  if(a==='taSend'){taRead();const E=S.edit;if(E?.kind!=='task-ask')return;if(!E.d.trim()&&!E.files.length&&!E.l.trim())return toast('اكتب عايز رأيه في إيه');E.busy=true;b.disabled=true;
+    try{const files=E.files.length?await upTo('cask/'+E.cid,E.files,p=>{const el=document.querySelector('[data-act=taSend]');if(el)el.textContent=p}):[];
+      await sendWork({cid:E.cid,kind:'ask',title:(E.t.trim()||'محتاجين رأي حضرتك').slice(0,120),caption:E.d.trim().slice(0,3000),files,links:splitLinks(E.l),byEmail:S.email});toast('اتبعت للعميل ✓ وهيوصلك رده');S.edit=null;closeSheet()}
+    catch(e){console.warn(e);E.busy=false;toast('مابعتش، جرّب تاني');sheetTAsk(E.cid)}return}
+  if(a==='rqSendC'){const r=(S.reqs||[]).find(x=>x.id===S.edit?.id),E=S.edit;if(!r)return;rqdRead();const cap=(E.scap??r.dCap??'').trim(),links=splitLinks(E.slinks??(r.dLinks||[]).join('\n'));if(!cap)return toast('اكتب الكابشن');b.disabled=true;E.busy=true;
+    const ok=await save(async()=>{await sendWork({cid:r.cid,rq:r.id,kind:r.type,title:r.title||RQ_T[r.type]?.n||'',caption:cap,files:(r.deliver||[]).map(f=>({url:f.url,name:f.name,type:f.type})),links,byEmail:meEmail()});await db.doc('reqs/'+r.id).update({sendPend:false,sentC:true,sentAt:firebase.firestore.FieldValue.serverTimestamp()});await rqSendDone(r)},'اتبعت للعميل ✓');
+    E.busy=false;if(ok){S.edit=null;closeSheet()}else b.disabled=false;return}
   if(a==='rqDeliver'){const r=(S.reqs||[]).find(x=>x.id===S.edit?.id),E=S.edit;if(!r)return;rqdRead();const links=splitLinks(E.links);if(!E.files.length&&!links.length)return toast('ارفع الشغل أو حط لينكه');
     E.busy=true;b.disabled=true;try{const up=E.files.length?await rqUpload(r.id,E.files,p=>{const el=b;if(el)el.textContent=p}):[];
-      await db.doc('reqs/'+r.id).update({deliver:[...(r.deliver||[]),...up],dLinks:[...new Set([...(r.dLinks||[]),...links])],dNote:E.note||'',status:'review',upAt:firebase.firestore.FieldValue.serverTimestamp()});
+      await db.doc('reqs/'+r.id).update({deliver:[...(r.deliver||[]),...up],dLinks:[...new Set([...(r.dLinks||[]),...links])],dNote:E.note||'',...(E.cap!=null?{dCap:E.cap.trim().slice(0,3000)}:{}),status:'review',upAt:firebase.firestore.FieldValue.serverTimestamp()});
       rqMarkTask(r,{done:true}).catch(err);rqPush(r.id,'review');cNote(r.cid,{design:'الديزاينر خلص التصميم، وجاري المراجعة',video:'المونتير خلص الفيديو، وجاري المراجعة',ads:'الميديا باير جهّز الإعلان، وجاري المراجعة'}[r.type]||'خلصنا الشغل، وجاري المراجعة');toast('اتسلّم ✓ ومستني المراجعة');S.edit=null;closeSheet()}
     catch(e){console.warn(e);E.busy=false;toast('الرفع ماكملش، جرّب تاني');sheetReq(r.id)}return}
   if(a==='bell'){S.bellOpen=!S.bellOpen;if(S.bellOpen){S.bellSeen=inSeen();try{localStorage.setItem('pensell_inSeen',String(Date.now()))}catch(_){}loadInbox(true)}render();return}
   if(a==='bellGo'){const x=(S.inbox||[])[+b.dataset.i];S.bellOpen=false;if(!x){render();return}const u=String(x.u||''),hs=u.includes('#')?u.slice(u.indexOf('#')):'';
     if(/^#(chat-|call)/.test(hs))return openFromHash(hs);if(hs==='#site'&&S.fin){S.tab='site';render();return}render();return}
   // «بيزنسي»: العميل
-  if(a==='cwOk'){const w=(S.cw||[]).find(x=>x.id===b.dataset.id);if(!w)return;b.disabled=true;if(await save(()=>db.doc('cwork/'+w.id).update({status:'approved',reply:'',repAt:firebase.firestore.FieldValue.serverTimestamp()}),'شكرًا لحضرتك ✓'))cAsk(`✅ ${S.cname} وافق على «${w.title||'الشغل'}»`);else b.disabled=false;return}
+  if(a==='cwOk'){const w=(S.cw||[]).find(x=>x.id===b.dataset.id);if(!w)return;b.disabled=true;if(await save(()=>db.doc('cwork/'+w.id).update({status:'approved',reply:'',repAt:firebase.firestore.FieldValue.serverTimestamp()}),'شكرًا لحضرتك ✓'))cAsk(`✅ ${S.cname} وافق على «${w.title||'الشغل'}»`,w.id);else b.disabled=false;return}
   if(a==='cwRev'){S.cwRev=b.dataset.id;render();setTimeout(()=>document.getElementById('cw_rev')?.focus(),30);return}
   if(a==='cwRevX'){S.cwRev=null;render();return}
   if(a==='cwSend'){const w=(S.cw||[]).find(x=>x.id===b.dataset.id),t=v('cw_rev');if(!w)return;if(!t)return toast('اكتب التعديل اللي محتاجه');b.disabled=true;
-    if(await save(()=>db.doc('cwork/'+w.id).update({status:'changes',reply:t.slice(0,1000),repAt:firebase.firestore.FieldValue.serverTimestamp()}),'التعديل اتبعت للتيم ✓')){S.cwRev=null;cAsk(`✏️ ${S.cname} طلب تعديل على «${w.title||'الشغل'}»: ${t}`)}else b.disabled=false;return}
+    if(await save(()=>db.doc('cwork/'+w.id).update({status:'changes',reply:t.slice(0,1000),repAt:firebase.firestore.FieldValue.serverTimestamp()}),'التعديل اتبعت للتيم ✓')){S.cwRev=null;cAsk(`✏️ ${S.cname} طلب تعديل على «${w.title||'الشغل'}»: ${t}`,w.id)}else b.disabled=false;return}
   if(a==='crType'){const F=S.crF||{type:'',details:'',link:'',files:[]};const d=document.getElementById('cr_d');if(d)F.details=d.value;const l=document.getElementById('cr_l');if(l)F.link=l.value;F.type=F.type===b.dataset.k?'':b.dataset.k;S.crF=F;render();setTimeout(()=>document.getElementById('cr_d')?.focus(),30);return}
   if(a==='crSend'){const F=S.crF;if(!F?.type)return;F.details=v('cr_d');F.link=v('cr_l');if(!F.details&&!F.link&&!F.files.length)return toast('اكتب التفاصيل');F.busy=true;render();
     try{const files=F.files.length?await upTo('creqs/'+S.cid,F.files):[];await db.collection('creqs').add({cid:S.cid,type:F.type,details:F.details.slice(0,2000),links:splitLinks(F.link),files,status:'new',byEmail:S.email,at:firebase.firestore.FieldValue.serverTimestamp()});
@@ -2341,8 +2384,8 @@ document.addEventListener('click',async e=>{
     if(!await save(()=>{const bt=db.batch();bt.set(db.collection('siteChats/'+cid+'/msgs').doc(),{t:t.slice(0,1000),from:'a',at:TS});bt.update(db.doc('siteChats/'+cid),{at:TS,last:t.slice(0,200),lastFrom:'a',unread:false});return bt.commit()}))document.getElementById('sc_t').value=t;return}
   if(a==='attJump'){document.getElementById('sec_'+b.dataset.k)?.scrollIntoView({behavior:'smooth',block:'start'});return}
   if(a==='sendNotif'){const to=v('nt_to'),t=(document.getElementById('nt_t')?.value||'').trim();if(!t)return toast('اكتب الرسالة');b.disabled=true;
-    try{const tok=await auth.currentUser.getIdToken(),r=await fetch(pushUrl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'notify',idToken:tok,to:to==='team'?'team':[to],text:t.slice(0,300)})}),j=await r.json();
-      if(!r.ok)throw new Error(j.error||r.status);document.getElementById('nt_t').value='';toast(j.sent?`الإشعار وصل لـ ${j.people} ${j.people===1?'شخص':'أشخاص'} ✓`:'محدش من اللي اخترتهم مفعّل الإشعارات')}catch(e){console.warn(e);toast('الإشعار ماتبعتش، جرّب تاني')}b.disabled=false;return}
+    try{const tok=await auth.currentUser.getIdToken(),r=await fetch(pushUrl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(to.startsWith('c:')?{action:'cnotify',idToken:tok,cids:to==='c:all'?(S.clients||[]).filter(c=>c.active!==false&&cEmails(c).length).map(c=>c.id):[to.slice(2)],t:t.slice(0,300)}:{action:'notify',idToken:tok,to:to==='team'?'team':[to],text:t.slice(0,300)})}),j=await r.json();
+      if(!r.ok)throw new Error(j.error||r.status);document.getElementById('nt_t').value='';toast(to.startsWith('c:')?`اتبعت ✓ هيلاقيه العميل في جرس «بيزنسي»${j.people?` · وصل موبايل ${j.people}`:''}`:j.sent?`الإشعار وصل لـ ${j.people} ${j.people===1?'شخص':'أشخاص'} ✓`:'محدش من اللي اخترتهم مفعّل الإشعارات')}catch(e){console.warn(e);toast('الإشعار ماتبعتش، جرّب تاني')}b.disabled=false;return}
   if(a==='askDone'){const d=(S.asksAll||[]).find(x=>x.id===b.dataset.e);if(!d)return;const me=S.emps.find(e=>(e.email||'')===S.email);
     const list=(d.list||[]).map(x=>x.id===b.dataset.id?{...x,done:true,doneDay:today(),by:me?.name||(S.fin?'الإدارة':'التيم ليدر')}:x);await save(()=>db.doc('asks/'+d.id).update({list}));return}
   if(a==='taskDone'){const T=S.myTask;if(!T)return;const items=(T.items||[]).map((x,i)=>i===+b.dataset.i?{...x,done:b.checked}:x);S.myTask={...T,items};
