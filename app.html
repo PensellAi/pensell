@@ -547,7 +547,7 @@ function compute(){
       if(dlt){const rate=pL.reduce((a,l)=>a+l.share/(l.target||15),0)/pL.length,cur=pL.reduce((a,l)=>a+l.amt,0),cap=[...new Map(pL.map(l=>[l.client+l.kind,l.share])).values()].reduce((a,x)=>a+x,0);
         const amt=Math.max(-cur,Math.min(cap-cur,dlt*rate));if(Math.abs(amt)>0.5)add(id,amt,{type:'sumadj',what:`${dlt>0?'بوستات زيادة':'بوستات أقل'} من ملخص الشهر (${Math.abs(dlt)})`})}}
     for(const[d,x]of Object.entries(S.checks?.[id]||{})){if(latePer<=0||!d.startsWith(S.month)||off.has(d)||!x.in||x.in<=grace||isFri(d))continue;(lates[id]??=[]).push(d);add(id,-latePer*lf,{type:'late',date:d,t:x.in})}
-    {const dv=allEl/md,pc=(+DLS().pct||0)/100;if(dv>0&&pc>0)for(const T of taskLates(id))add(id,-dv*Math.min(1,T.h*pc),{type:'tlate',what:T.what,h:T.h,date:T.date})}
+
     // التيم ليدر: أي يوم شغل عدّى من غير «إنهاء اليوم» قبل 11:59 بالليل بيتخصم يوم
     if(isTLx&&per>0){const AMw=attModel().work;for(const d of AMw){if(d>=today()||isFri(d)||off.has(d)||closedOk(d))continue;add(id,-per,{type:'noclose',date:d})}}
   }
@@ -1254,7 +1254,7 @@ function sheetPunchAl(){const cur=(()=>{try{return localStorage.getItem('pensell
    <div class="row"><button class="btn primary" data-act="palSave">${cur?'حفظ':'شغّل المنبه'}</button>${cur?'<button class="btn" data-act="palOff">اقفله</button>':''}</div></div>`)}
 const mSched=(key,id,item)=>{if(!auth.currentUser)return Promise.resolve(false);return auth.currentUser.getIdToken().then(t=>fetch(pushUrl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'msched',idToken:t,key,id,item})})).then(r=>r.ok).catch(()=>false)};
 function sheetInfo(title,html){openSheet(`<div class="sheet-h"><h3>${title}</h3><button class="x" data-act="close" aria-label="قفل">×</button></div><div class="stack">${html}</div>`)}
-function myDls(){const me=S.me;if(!me)return null;const d=today(),L=(S.reqs||[]).filter(r=>r.to===me.id&&OPEN_ST.includes(r.status)&&r.dl&&dStr(r.dl)===d).map(r=>({h:new Date(r.dl).getHours()-1,t:(r.title||RQ_T[r.type]?.n||'').slice(0,60)+' · '+(r.cname||'')})).filter(x=>x.h>=9).slice(0,12);return{d,L}}
+function myDls(){const me=S.me;if(!me)return null;const d=today(),L=(S.reqs||[]).filter(r=>r.to===me.id&&OPEN_ST.includes(r.status)&&!r.dlvAt&&r.dl&&dStr(r.dl)===d).flatMap(r=>{const t=(r.title||RQ_T[r.type]?.n||'').slice(0,60)+' · '+(r.cname||''),H=new Date(r.dl).getHours();return [{h:H-1,t},{h:Math.min(23,H+(new Date(r.dl).getMinutes()?1:0)),t:'⚠️ '+t}]}).filter(x=>x.h>=9).slice(0,12);return{d,L}}
 
 // مين يبعت البوست كامل للعميل: الكريتور اللي طلب، أو كريتور الأكونت
 function rqSender(r){const by=S.emps.find(e=>e.id===r.by);if(by&&has(by,'creator')&&by.email)return by;const A=S.asg?.[r.cid],cr=(A?.creator||[]).slice(-1)[0]?.e,e=S.emps.find(x=>x.id===cr);return e&&e.email?e:null}
@@ -2092,9 +2092,8 @@ function vSet(){
     <div class="field"><label class="label" for="dl_w1">لحد</label><input id="dl_w1" type="time" value="${h(L.w1)}"></div>
     <div class="field"><label class="label" for="dl_ds">التيم ليدر يوزّع مهام بكره من</label><input id="dl_ds" type="time" value="${h(L.ds)}"></div>
     <div class="field"><label class="label" for="dl_de">آخر سماحية للتوزيع</label><input id="dl_de" type="time" value="${h(L.de)}"></div>
-    <div class="field"><label class="label" for="dl_pct">خصم كل ساعة تأخير (% من اليوم)</label><input id="dl_pct" type="number" min="0" max="100" value="${h(L.pct)}"></div>
    </div>
-   <p class="small muted" style="margin:0">الديزاينر لو استلم بعد ميعاده، الديدلاين بيبقى نفس الميعاد تاني يوم. الميديا باير بتتحسبله ساعات جوه مواعيد الشغل بس. أي حد يتأخر عن الديدلاين (أو التيم ليدر عن التوزيع) بيتخصم منه النسبة دي من يومه عن كل ساعة، وبحد أقصى يوم للمهمة الواحدة.${L.since?` الخصم شغال من ${rqDay(L.since)}.`:' الخصم بيبدأ من يوم ما تحفظ المواعيد دي.'}</p>
+   <p class="small muted" style="margin:0">الديزاينر لو استلم بعد ميعاده، الديدلاين بيبقى نفس الميعاد تاني يوم. الميديا باير بتتحسبله ساعات جوه مواعيد الشغل بس. التأخير مالوش خصم: بيوصل تنبيه قبل الديدلاين بساعة، وتنبيه لما الديدلاين يعدّي، وبيظهر «متأخرة» للتيم ليدر. لما تغيّر المواعيد، المهام المفتوحة بتتحدّث على المواعيد الجديدة.</p>
    <div><button class="btn primary" data-act="saveDl">حفظ مواعيد المهام</button></div></div>`})()}
   <div class="panel stack"><h3>مواعيد الحضور</h3>
    <div class="grid3">
@@ -2627,9 +2626,9 @@ document.addEventListener('click',async e=>{
   if(a==='goSend'){S.attDate=nextWD(today());S.attDraft=null;S.tab='att';if(S.taskDate!==S.attDate){S.taskDate=S.attDate;subTasks()}if(S.attDate.slice(0,7)!==S.month){S.month=S.attDate.slice(0,7);subMonth()}closeSheet();render();setTimeout(()=>document.getElementById('sec_posts')?.scrollIntoView({behavior:'smooth'}),80);return}
   if(a==='enSend'){S.sendAfter={k:b.dataset.k,e:b.dataset.e,to:document.getElementById('cvTo_'+b.dataset.e)?.value||''};document.querySelector('[data-act=saveAtt]')?.click();return}
   if(a==='rqApNow'){const r=(S.reqs||[]).find(x=>x.id===(b.dataset.id||S.edit?.id));if(!r)return;b.disabled=true;if(await save(()=>rqApproveNow(r),'اتعتمدت ✓ واتحسبت')){if(S.edit?.kind==='req')closeSheet()}else b.disabled=false;return}
-  if(a==='saveDl'){const g=id=>v(id),L=DLS(),dl={cr:g('dl_cr')||L.cr,dz:g('dl_dz')||L.dz,edH:Math.max(1,+g('dl_ed')||24),mbH:Math.max(1,+g('dl_mb')||2),w0:g('dl_w0')||L.w0,w1:g('dl_w1')||L.w1,ds:g('dl_ds')||L.ds,de:g('dl_de')||L.de,pct:Math.max(0,Math.min(100,+g('dl_pct')||0)),since:L.since||today()};
+  if(a==='saveDl'){const g=id=>v(id),L=DLS(),dl={cr:g('dl_cr')||L.cr,dz:g('dl_dz')||L.dz,edH:Math.max(1,+g('dl_ed')||24),mbH:Math.max(1,+g('dl_mb')||2),w0:g('dl_w0')||L.w0,w1:g('dl_w1')||L.w1,ds:g('dl_ds')||L.ds,de:g('dl_de')||L.de,pct:0,since:L.since||today()};
     if(dl.de<=dl.ds)return toast('آخر ميعاد للتوزيع لازم يكون بعد بدايته');if(dl.w1<=dl.w0)return toast('نهاية الشغل لازم تكون بعد بدايته');
-    if(await save(()=>db.doc('cfg/settings').set({dl},{merge:true}),'مواعيد المهام اتحفظت ✓')){S.cfg={...S.cfg,dl};render()}return}
+    if(await save(()=>db.doc('cfg/settings').set({dl},{merge:true}),'مواعيد المهام اتحفظت ✓')){S.cfg={...S.cfg,dl};const U=(S.reqs||[]).filter(r=>OPEN_ST.includes(r.status)&&r.dl&&!r.dlvAt&&['pl','design'].includes(r.type)).map(r=>[r,r.type==='pl'?dAt(r.due,dl.cr):dAt(dStr(r.dl),dl.dz)]).filter(([r,n])=>n!==r.dl);for(let i=0;i<U.length;i+=400){const bt=db.batch();U.slice(i,i+400).forEach(([r,n])=>bt.update(db.doc('reqs/'+r.id),{dl:n}));await bt.commit().catch(err)}if(U.length)toast(`اتحدّث ميعاد ${U.length} مهمة مفتوحة ✓`);render()}return}
   if(a==='cRateAsk'){const c=document.getElementById('ta_c')?.value;if(!c)return;const m=today().slice(0,7);if(await save(()=>db.doc('cdocs/'+c+'_rate_'+m).set({cid:c,kind:'rate',month:m,at:firebase.firestore.FieldValue.serverTimestamp()}),'اتبعت للعميل ✓'))cNote(c,'ياريت تقيّم شغلنا الشهر ده من «بيزنسي» ⭐');return}
   if(a==='taAsk'){const c=document.getElementById('ta_c')?.value;if(!c)return;S.taC=c;S.edit=null;return sheetTAsk(c)}
   if(a==='cChat'){const c=document.getElementById('ta_c')?.value;if(!c)return;S.taC=c;S.prevTab=S.tab;S.tab='chat';window.scrollTo(0,0);return openChat('c_'+c)}
