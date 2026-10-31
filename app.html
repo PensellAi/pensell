@@ -252,6 +252,12 @@ const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth
 const S={tab:'home',month:today().slice(0,7),attDate:today(),taskDate:today(),fin:false,asg:{},tasks:{},ratings:{},distDraft:{},
  cfg:{company:'Pensell',vf:'',ip:'',ipLink:'',note:''},F:JSON.parse(JSON.stringify(DEF)),
  emps:[],clients:[],recs:[],att:{},unsub:{},attDraft:null,edit:null};
+// شغل العملاء/الموظفين اللي اتشالوا بيختفي من كل القوايم
+const liveCl=cid=>{if(!cid||!S.clientsLoaded)return true;const c=S.clients.find(x=>x.id===cid);return !!c&&c.active!==false};
+const liveEm=eid=>{if(!eid||!S.empsLoaded||S.mode!=='app')return true;return S.emps.some(x=>x.id===eid)};
+const liveRq=r=>liveCl(r.cid)&&liveEm(r.to)&&(!r.sendTo||liveEm(r.sendTo));
+{let _rq=[],_k=null,_v=[];Object.defineProperty(S,'reqs',{configurable:true,get(){if(_k&&_k[0]===_rq&&_k[1]===S.clients&&_k[2]===S.emps&&_k[3]===S.clientsLoaded)return _v;_v=(_rq||[]).filter(liveRq);_k=[_rq,S.clients,S.emps,S.clientsLoaded];return _v},set(v){_rq=v||[];_k=null}})}
+
 
 const h=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=n=>Math.round(n||0).toLocaleString('en-US');
@@ -420,7 +426,7 @@ async function start(u){
   db.doc('chatRead/'+S.email).onSnapshot(s=>{S.chatRead=s.exists?s.data().m||{}:{};rr()},err);
   db.doc('stars/latest').onSnapshot(s=>{S.star=s.exists?s.data():null;rr()},err);
   if(S.mode==='app'){
-    db.collection('clients').onSnapshot(s=>{S.clients=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.code||0)-(b.code||0));if(S.fin)setTimeout(cleanClients,3000);setTimeout(syncClientChats,2500);rr()},err);
+    db.collection('clients').onSnapshot(s=>{S.clients=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.code||0)-(b.code||0));S.clientsLoaded=1;if(S.fin)setTimeout(cleanClients,3000);setTimeout(syncClientChats,2500);rr()},err);
     db.collection('checkins').onSnapshot(s=>{S.checks={};s.docs.forEach(d=>S.checks[d.id]=normLog(d.data(SNAP).log));rr()},err);
   }
   if(S.fin){
@@ -654,7 +660,7 @@ function autoPlan(X,m){const days=monDays(m).filter(d=>!isFri(d)),q=X.q||{},item
   days.filter(d=>!busy(d)).forEach(d=>put(d,'ستوري'));
   return items}
 // المتابعة اليومية بتتعلّم لوحدها من الخطة (لليوم اللي لسه ماتحفظش)
-function planFill(D,d){const m=d.slice(0,7);let n=0;for(const P of Object.values(S.plans||{})){if(P.month!==m||!P.tk)continue;const its=P.items?.[d]||[];if(!its.length)continue;const A=S.asg?.[P.cid];if(!A)continue;
+function planFill(D,d){const m=d.slice(0,7);let n=0;for(const P of Object.values(S.plans||{})){if(P.month!==m||!P.tk||!liveCl(P.cid))continue;const its=P.items?.[d]||[];if(!its.length)continue;const A=S.asg?.[P.cid];if(!A)continue;
   const day=+d.slice(8),segs=[...(A.creator||[])].sort((a,b)=>(+a.from||1)-(+b.from||1)),cr=(segs.filter(x=>(+x.from||1)<=day).pop()||segs[0])?.e,dg=segAt(dSegs(A),day)?.e;
   for(const it of its){const ct=it.t==='كيرزل'?'كيرزل ديزاين':it.t==='بوست'?'ديزاين':it.t;if(it.rq||(D.plSkip||[]).includes(it.id)||D.posts.some(x=>x.pli===it.id))continue;if(cr&&PS_T.includes(ct)&&!D.posts.some(x=>!x.pli&&x.e===cr&&x.a===P.cid&&x.t===ct&&x.cv==null&&(x.idea||'')===(it.idea||''))){D.posts.push({e:cr,a:P.cid,t:ct,pli:it.id,...(it.idea?{idea:it.idea}:{})});n++}
     }}
@@ -1240,10 +1246,11 @@ function sheetRdPost(id){const x=(S.reqs||[]).find(r=>r.id===id);if(!x)return;co
    <button class="btn primary" data-act="rdPostSave" style="justify-content:center">ابعته للمراجعة</button><p class="small muted" style="margin:0">لو اتقبل، ارفع البوست، وبيتحسبلك ولصاحب الشغل.</p></div>`)}
 function rdRead(){const E=S.edit;if(E?.kind!=='ready')return;const g=id=>document.getElementById(id);if(g('rd_c'))E.cid=g('rd_c').value;if(g('rd_t'))E.title=g('rd_t').value;if(g('rd_l'))E.links=g('rd_l').value;if(g('rd_cap'))E.cap=g('rd_cap').value}
 // سطر واحد للمهمة: بتفتح بالتفاصيل لما تدوس عليها، وجنبها منبه
-const ST_C={todo:'#9A8F90',changes:'var(--bad)',review:'var(--gold)',pending:'var(--gold)',rpend:'var(--gold)',ready:'#2F6FDB',done:'var(--good)'};
+const ST_C={todo:'#E8B400',changes:'#8E1B1B',review:'#7CCB7E',pending:'#E8B400',rpend:'#7CCB7E',ready:'#7CCB7E',done:'#1E9E4A'};
+const stCol=r=>lateH(r)&&OPEN_ST.includes(r.status)?'#8E1B1B':(ST_C[r.status]||'var(--muted)');
 const myAl=()=>{try{return JSON.parse(localStorage.getItem('pensell_al')||'{}')}catch(_){return {}}};
 const rqRow=(r,opt={})=>{const st=RQ_S[r.status]||RQ_S.pending,lt=lateH(r),al=myAl()[r.id],to=opt.who?(emp(r.to)?.name||r.toName||''):'';
-  return `<div class="trow"><button class="trow-m" data-act="rqOpen" data-id="${r.id}"><span class="tdot" style="background:${ST_C[r.status]||'var(--muted)'}" title="${st[0]}"></span><span class="t">${h(r.title||RQ_T[r.type]?.n||'')}<span class="muted"> · ${h(r.cname||'')}${to?' · '+h(to):''}</span></span><span class="mt">${lt?`<span style="color:var(--bad)">متأخرة ${lt}س</span>`:r.dl&&OPEN_ST.includes(r.status)?'⏰ '+hm(new Date(r.dl)):st[0]}</span></button>${opt.ap&&isLead()&&!['done','ready','rpend'].includes(r.status)?`<button class="btn xs good" data-act="rqApNow" data-id="${r.id}">اعتمد</button>`:''}${opt.noal||1?'':`<button class="tal ${al&&al>Date.now()?'on':''}" data-act="tAlarm" data-id="${r.id}" data-t="${h((r.title||'').slice(0,60))}" aria-label="منبه">${al&&al>Date.now()?'🔔':'⏰'}</button>`}</div>`};
+  return `<div class="trow"><button class="trow-m" data-act="rqOpen" data-id="${r.id}"><span class="tdot" style="background:${stCol(r)}" title="${st[0]}"></span><span class="t">${h(r.title||RQ_T[r.type]?.n||'')}<span class="muted"> · ${h(r.cname||'')}${to?' · '+h(to):''}</span></span><span class="mt">${lt?`<span style="color:var(--bad)">متأخرة ${lt}س</span>`:r.dl&&OPEN_ST.includes(r.status)?'⏰ '+hm(new Date(r.dl)):st[0]}</span></button>${opt.ap&&isLead()&&!['done','ready','rpend'].includes(r.status)?`<button class="btn xs good" data-act="rqApNow" data-id="${r.id}">اعتمد</button>`:''}${opt.noal||1?'':`<button class="tal ${al&&al>Date.now()?'on':''}" data-act="tAlarm" data-id="${r.id}" data-t="${h((r.title||'').slice(0,60))}" aria-label="منبه">${al&&al>Date.now()?'🔔':'⏰'}</button>`}</div>`};
 const dutyRow=(k,ic,t,meta,act,extra='')=>`<div class="trow"><button class="trow-m" data-act="${act}" ${extra}><span class="tdot" style="background:${meta.ok?'var(--good)':meta.late?'var(--bad)':'var(--gold)'}"></span><span class="t">${ic} ${t}</span><span class="mt">${meta.txt||''}</span></button></div>`;
 function sheetAlarm(id,title){const now=new Date(Date.now()+30*6e4);S.edit={kind:'alarm',id,title};
   openSheet(`<div class="sheet-h"><div><h3>⏰ نبّهني</h3><div class="small muted">${h(title||'')}</div></div><button class="x" data-act="close" aria-label="قفل">×</button></div><div class="stack">
@@ -1305,9 +1312,14 @@ function askBox(){const mine=(S.myAsks||[]).filter(x=>!x.done||(x.doneDay||'')>=
    <div><button class="btn primary" data-act="sendAsk">ابعت للإدارة والتيم ليدر</button></div>
    ${mine.length?`<div class="small stack" style="gap:4px">${mine.map(x=>`<div class="row between" style="gap:8px;flex-wrap:nowrap"><span class="muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h(x.t)}</span><span style="flex:none;color:${x.done?'var(--good)':'var(--muted)'}">${x.done?'اتشافت ✓':'اتبعتت'}</span></div>`).join('')}</div>`:''}</div>`}
 // الانصراف بيفتح 8 بالليل (والموديريتور 11)، وبعد ما يخلّص مهامه
-function outGate(e){const hr=has(e,'moderator')?23:20,now=new Date(),it=(S.myTask?.items||[]),left=it.filter(x=>!x.done).length;
-  if(now.getHours()<hr)return{ok:false,why:`الانصراف بيفتح الساعة ${hr===23?'11':'8'} بالليل${left?` · وفاضل ${left} مهمة`:''}`};
-  if(left)return{ok:false,why:`خلّص مهامك الأول علشان تقدر تسجّل انصراف (فاضل ${left})`};return{ok:true}}
+function gateLeft(e){const id=e?.id,td=today(),eod=new Date(td+'T23:59:59').getTime();
+  const TI=(S.myTask?.items||[]).filter(x=>x.k!=='rq'&&!(x.id&&String(x.id).startsWith('rq_'))&&!x.done).map(x=>({t:x.t||'مهمة',id:''}));
+  const R=(S.reqs||[]).filter(r=>((r.to===id&&OPEN_ST.includes(r.status))||(r.sendPend&&r.sendTo===id))&&(!r.due||r.due<=td)&&(!r.dl||r.dl<=eod)).map(r=>({t:(r.title||RQ_T[r.type]?.n||'مهمة')+(r.cname?' · '+r.cname:''),id:r.id}));
+  return [...R,...TI]}
+function outGate(e){const hr=has(e,'moderator')?23:20,now=new Date(),L=gateLeft(e),left=L.length;
+  const list=left?`<div class="stack" style="gap:4px;margin-top:6px">${L.slice(0,6).map(x=>x.id?`<button class="btn xs" data-act="rqOpen" data-id="${x.id}" style="justify-content:center">👈 ${h(x.t)}</button>`:`<button class="btn xs" data-act="goMine" style="justify-content:center">👈 ${h(x.t)}</button>`).join('')}</div>`:'';
+  if(now.getHours()<hr)return{ok:false,why:`الانصراف بيفتح الساعة ${hr===23?'11':'8'} بالليل${left?` · وفاضل ${left} ${left===1?'مهمة':'مهام'}`:''}`+list,txt:`الانصراف بيفتح الساعة ${hr===23?'11':'8'} بالليل`};
+  if(left)return{ok:false,why:`خلّص مهامك الأول علشان تقدر تسجّل انصراف · فاضل:`+list,txt:'خلّص الأول: '+L.map(x=>x.t).slice(0,3).join('، ')};return{ok:true}}
 function vCheckin(){
   if(!S.empsLoaded)return `<div class="empty"><h3>بيحمّل…</h3></div>`;
   const e=S.me;
@@ -1906,7 +1918,7 @@ function vAtt(){
   if(!S.attDraft||S.attDraft.date!==d||(!S.attDraft.dirty&&(S.attDraft.src!==S.att[d]||S.attDraft.pl!==S.plans))){
     const D={date:d,src:S.att[d],mods:JSON.parse(JSON.stringify(day.mods||{})),extra:{},covers:JSON.parse(JSON.stringify(day.covers||[]))};
     for(const k of Object.keys(EN))D[k]=JSON.parse(JSON.stringify(day[k]||[]));
-    D.pl=S.plans;D.plSkip=[...(day.plSkip||[])];if(d>=today())planFill(D,d);
+    D.pl=S.plans;D.plSkip=[...(day.plSkip||[])];if(d>=today()){for(const k of Object.keys(EN))D[k]=(D[k]||[]).filter(x=>x.ok===true||(liveCl(x.a)&&liveEm(x.e)));planFill(D,d)}
     S.emptyMods=!day.mods;S.attDraft=D;
   }
   const D=S.attDraft;
@@ -1916,7 +1928,9 @@ function vAtt(){
   const people=roles=>[...S.emps.filter(e=>roles.some(r=>has(e,r))),...S.emps.filter(e=>!roles.some(r=>has(e,r)))];
   const pend=Object.keys(EN).reduce((s,k)=>s+(D[k]||[]).filter(x=>x.e&&x.a&&!x.rq&&!['posts','designs'].includes(k)&&x.ok!==true&&x.ok!==false).length,0);
   const at=(k,f,i)=>`id="en_${k}_${f}_${i}" data-en="${k}" data-f="${f}" data-i="${i}"`;
-  const pTasks=(eid,skipLinked,types)=>{const L=(S.reqs||[]).filter(r=>r.to===eid&&(!types||types.includes(r.type))&&r.status!=='rejected'&&(r.due===d||(d===today()&&r.due<d&&OPEN_ST.includes(r.status)))&&!(skipLinked&&r.att===d&&r.attK===skipLinked));if(!L.length)return '';return `<div style="margin-top:4px">${L.map(r=>rqRow(r,{ap:1,noal:1})).join('')}</div>`};
+  const pTasks=(eid,skipLinked,types)=>{const L=(S.reqs||[]).filter(r=>r.to===eid&&(!types||types.includes(r.type))&&r.status!=='rejected'&&(r.due===d||(d===today()&&r.due<d&&OPEN_ST.includes(r.status)))&&!(skipLinked&&r.att===d&&r.attK===skipLinked));if(!L.length)return '';const dn=L.filter(r=>r.status==='done').length,sb=L.filter(r=>['review','pending','rpend','ready'].includes(r.status)).length,op=L.filter(r=>OPEN_ST.includes(r.status)),lt=op.filter(r=>lateH(r)).length,k2=eid+'|'+(skipLinked||'')+'|'+(types||[]).join(','),ex=(S.attExp||{})[k2];
+  const pill=(n,t,c)=>n?`<span style="display:inline-flex;align-items:center;gap:4px"><span class="tdot" style="background:${c}"></span>${t} ${n}</span>`:'';
+  return `<div style="margin-top:4px"><button class="trow-m" data-act="attExp" data-k="${h(k2)}" style="width:100%;display:flex;justify-content:space-between;gap:8px;padding:6px 0;background:none;border:0;cursor:pointer;color:inherit;font:inherit"><span class="small row" style="gap:10px;flex-wrap:wrap">${pill(dn,'خلّص','#1E9E4A')}${pill(sb,'اتسلّم','#7CCB7E')}${pill(op.length-lt,'فاضل','#E8B400')}${pill(lt,'متأخر','#8E1B1B')}</span><span class="small muted">${ex?'إخفاء ▲':'التفاصيل ▼'}</span></button>${ex?L.map(r=>rqRow(r,{ap:1,noal:1})).join(''):''}</div>`};
   const pCard=(e,k,types)=>`<div class="en-row"><div class="row between"><b>${h(e.name)}</b>${punch(e.id,d)}</div>${pTasks(e.id,null,types)||'<div class="small muted">مفيش مهام عليه اليوم ده.</div>'}${extraUI(e.id,k)}${tools(e.id,k)}</div>`;
   const sendBtn=(k,e)=>{const sn=S.att[d]?.sent?.[e.id],own=k==='mods'?[]:(D[k]||[]).filter(x=>x.e===e.id),newN=own.filter(x=>!x.rq).length;return d<today()?'':`<div class="row between" style="gap:6px;margin-top:6px;border-top:1px dashed var(--line);padding-top:8px"><span class="small ${sn?'':'muted'}" style="${sn?'color:var(--good)':''}">${sn?`اتبعتت ✓ ${hm(new Date(sn))}${newN?` · فيه ${newN} جديدة`:''}`:'لسه ماتبعتتش'}</span><span class="row" style="gap:6px"><select id="cvTo_${e.id}" aria-label="مين يستلم المهام" style="width:auto;max-width:150px"><option value="">يستلمها ${h(e.name.split(' ')[0])}</option>${S.emps.filter(x=>x.id!==e.id&&(has(x,k==='posts'?'creator':'designer')||has(x,'teamleader'))).map(x=>`<option value="${x.id}">غايب · تروح لـ ${h(x.name)}</option>`).join('')}</select><button class="btn sm ${sn&&!newN?'':'primary'}" data-act="enSend" data-k="${k}" data-e="${e.id}">📤 إرسال المهام</button></span></div>`};
   // سطر التأكيد تحت كل مهمة: الموظف علّم؟ + تم فعلاً / متمّتش + السبب
@@ -1986,7 +2000,6 @@ function vAtt(){
   <div class="row between"><h2>المهام والمتابعة</h2><div class="row"><input type="date" id="attDate" value="${d}" style="width:auto"><span class="pill ${saved?'paid':'none'}">${saved?'متسجّلة':'لسه ماتسجّلتش'}</span></div></div>
   ${isFri(d)?'<div class="notice">الجمعة إجازة: مفيش بصمة، ومش بيتحسب غياب أو تأخير.</div>':''}
   ${S.attDraft.fromPlan&&!saved?'<div class="notice" style="background:var(--accent-soft)">📅 مهام الكريتور والديزاينر اتعلّمت لوحدها من خطة الشهر. راجعها وعدّل لو محتاج ودوس حفظ.</div>':''}
-  <div class="panel" id="sec_board"><div class="row between"><h3>مهام ${d===today()?'النهارده':rqDay(d)} لكل واحد</h3>${d===today()&&isLead()?`<button class="btn sm" data-act="goSend">ابعت مهام بكره</button>`:''}</div><div style="margin-top:8px">${dayBoard(d,{over:d===today()})}</div><p class="small muted" style="margin:8px 0 0">المهمة بتتحسب في المرتب لما تتعتمد. ابعت مهام كل واحد من الكارت بتاعه تحت بزرار «إرسال المهام».</p></div>
   <nav class="att-nav" aria-label="أقسام المتابعة">${[['board','مهام اليوم'],['reqs','المهام'],['posts','الكريتورز'],['designs','الديزاينرز'],['mods','الموديريتورز'],['shoots','المصورين'],['edits','المونتيرز'],['ads','الميديا باير'],...(restP.length?[['rest','باقي التيم']]:[]),['end','إنهاء اليوم']].map(([k,nm])=>`<button class="chip" data-act="attJump" data-k="${k}">${nm}</button>`).join('')}</nav>
   <p class="small muted" style="margin:0">اختار مهام كل واحد ودوس «إرسال المهام» في آخر الكارت بتاعه: بتوصله إشعار وبتظهرله في «صفحتي». هو بيسلّم من المهمة، وانت أو التيم ليدر بتعتمدوها (أو تعتمدوها على طول لو سلّمها برّه الأبلكيشن)، ولما تتعتمد بتتحسب في المرتب.</p>
   ${leadReqsPanel()}
@@ -2230,6 +2243,56 @@ async function invPdf(r,elId,fname){
   if(navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file],title:name})}catch(e){if(e.name!=='AbortError')throw e}}
   else{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();toast('الـ PDF اتنزّل')}
 }
+// PDF بالرسم المباشر على canvas علشان العربي يطلع متوصّل وصح (html2canvas كان بيفكّك الحروف)
+async function drawDocPdf(spec,fname){
+  await loadJs('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+  const FF='"IBM Plex Sans Arabic","Readex Pro",Tahoma,"Segoe UI",Arial,sans-serif';
+  try{await Promise.all(['400','600','700'].map(w=>document.fonts.load(w+' 16px "IBM Plex Sans Arabic"')))}catch(_){}
+  const SC=2,W=420*SC,P=18*SC,IW=W-2*P;
+  const ldImg=src=>new Promise(ok=>{if(!src)return ok(null);const im=new Image();if(!/^data:/.test(src))im.crossOrigin='anonymous';im.onload=()=>ok(im);im.onerror=()=>ok(null);im.src=src});
+  const logo=await ldImg(LOGO),imgs=[];for(const u of spec.imgs||[]){const im=await ldImg(u);if(im)imgs.push(im)}
+  const mc=document.createElement('canvas').getContext('2d');mc.direction='rtl';
+  const font=(px,w)=>`${w||400} ${px*SC}px ${FF}`;
+  const wrap=(t,px,w,max)=>{mc.font=font(px,w);const out=[];String(t||'').split('\n').forEach(par=>{const ws=par.split(/\s+/).filter(Boolean);if(!ws.length){out.push('');return}let ln='';
+    for(const x of ws){const tr=ln?ln+' '+x:x;if(mc.measureText(tr).width<=max||!ln)ln=tr;else{out.push(ln);ln=x}
+      while(mc.measureText(ln).width>max&&ln.length>1){let k=ln.length-1;while(k>1&&mc.measureText(ln.slice(0,k)).width>max)k--;out.push(ln.slice(0,k));ln=ln.slice(k)}}
+    out.push(ln)});return out};
+  // بنحسب الطول الأول، وبعدين نرسم
+  const ops=[];let y=0;const add=(h,fn)=>{const y0=y;ops.push(c=>fn(c,y0));y+=h};
+  // الهيدر
+  add(20*SC,()=>{});
+  const metaL=(spec.meta||[]).flatMap((m,i)=>wrap(m,13,i?400:700,IW*0.55).map(t=>({t,b:!i})));
+  const lh=logo?30*SC:0,lw=logo?logo.width*lh/logo.height:0,hH=Math.max(lh+6*SC+16*SC,metaL.length*19*SC);
+  add(hH,(c,y0)=>{if(logo)c.drawImage(logo,W-P-lw,y0,lw,lh);c.textAlign='right';c.fillStyle='#7A7072';c.font=font(12);c.fillText(spec.title,W-P,y0+lh+6*SC+12*SC);
+    c.textAlign='left';metaL.forEach((m,i)=>{c.font=font(13,m.b?700:400);c.fillStyle=m.b?'#231E1F':'#7A7072';c.fillText(m.t,P,y0+(i+1)*19*SC-5*SC)})});
+  add(14*SC,()=>{});add(4*SC,(c,y0)=>{c.fillStyle='#D42127';c.fillRect(0,y0,W,4*SC)});add(16*SC,()=>{});
+  // الأرقام
+  const nums=(spec.nums||[]).filter(x=>x[1]);
+  if(nums.length){const g=8*SC,cw=(IW-2*g)/3,ch=56*SC;
+    add(ch+8*SC,(c,y0)=>{nums.slice(0,3).forEach(([l,v],i)=>{const x=W-P-(i+1)*cw-i*g;c.fillStyle='#F6F4F4';rr(c,x,y0,cw,ch,10*SC);c.fill();c.textAlign='center';c.fillStyle='#7A7072';c.font=font(10.5);
+      const ll=wrap(l,10.5,400,cw-8*SC);c.fillText(ll[0]||'',x+cw/2,y0+18*SC);c.fillStyle='#231E1F';c.font=font(17,700);c.fillText(String(v),x+cw/2,y0+44*SC)})})}
+  // الأسئلة والإجابات
+  for(const [l,t] of spec.qa||[]){if(!t)continue;const L=wrap(t,14,400,IW);
+    add(10*SC,()=>{});add(18*SC,(c,y0)=>{c.textAlign='right';c.fillStyle='#7A7072';c.font=font(12);c.fillText(l,W-P,y0+13*SC)});
+    add(L.length*24*SC,(c,y0)=>{c.textAlign='right';c.fillStyle='#231E1F';c.font=font(14);L.forEach((s,i)=>c.fillText(s,W-P,y0+(i+1)*24*SC-7*SC))});
+    add(10*SC,()=>{});add(1*SC,(c,y0)=>{c.fillStyle='#EEE8E8';c.fillRect(P,y0,IW,SC)})}
+  // جدول الخطة
+  for(const row of spec.rows||[]){const dW=110*SC,tw=IW-dW-8*SC;const items=row.items.map(it=>{mc.font=font(11,600);const cw=mc.measureText(it.n).width+12*SC;return{...it,cw,L:wrap(it.idea||'',13,400,tw-cw-6*SC)}});
+    const hh=Math.max(22*SC,items.reduce((s,it)=>s+Math.max(1,it.L.length)*21*SC+3*SC,0))+12*SC;
+    add(hh,(c,y0)=>{c.textAlign='right';c.fillStyle='#231E1F';c.font=font(12.5,600);c.fillText(row.d,W-P,y0+20*SC);let yy=y0+6*SC;
+      for(const it of items){const xr=W-P-dW;c.fillStyle=it.c||'#999';rr(c,xr-it.cw,yy+1*SC,it.cw,18*SC,6*SC);c.fill();c.fillStyle='#fff';c.font=font(11,600);c.textAlign='center';c.fillText(it.n,xr-it.cw/2,yy+14*SC);
+        c.textAlign='right';c.fillStyle='#3B3436';c.font=font(13);it.L.forEach((s,i)=>c.fillText(s,xr-it.cw-6*SC,yy+(i+1)*21*SC-6*SC));yy+=Math.max(1,it.L.length)*21*SC+3*SC}
+      c.fillStyle='#EEE8E8';c.fillRect(P,y0+hh-SC,IW,SC)})}
+  for(const im of imgs){const ih=im.height*IW/im.width;add(10*SC,()=>{});add(ih,(c,y0)=>{c.save();rr(c,P,y0,IW,ih,8*SC);c.clip();c.drawImage(im,P,y0,IW,ih);c.restore()})}
+  add(22*SC,()=>{});
+  const cv=document.createElement('canvas');cv.width=W;cv.height=Math.ceil(y);const c=cv.getContext('2d');c.direction='rtl';c.fillStyle='#FFFFFF';c.fillRect(0,0,W,cv.height);ops.forEach(f=>f(c));
+  const w=148,hh=cv.height*w/cv.width,pdf=new window.jspdf.jsPDF({unit:'mm',format:[w,hh]});
+  pdf.addImage(cv.toDataURL('image/jpeg',0.95),'JPEG',0,0,w,hh);
+  const blob=pdf.output('blob'),file=new File([blob],fname,{type:'application/pdf'});
+  if(navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file],title:fname})}catch(e){if(e.name!=='AbortError')throw e}}
+  else{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fname;document.body.appendChild(a);a.click();a.remove();toast('الـ PDF اتنزّل')}
+  function rr(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath()}
+}
 // تجميع المرتب بالأكونت: سطر واحد لكل أكونت، والتفاصيل للمدير بس
 function accLabel(l,C){if(l.type==='deliv')return `كريتور ${l.kind} (${l.n} من ${l.target})`;if(l.type==='design')return `ديزاين (${l.n} من ${l.target||C?.tgt||8})`;return String(l.what||'').replace(' · '+l.acc,'').replace(l.acc+' · ','')}
 const accFull=l=>(l.type==='deliv'||l.type==='design')?(l.tot?l.share*l.n/l.tot:l.share):l.amt;
@@ -2410,7 +2473,7 @@ document.addEventListener('click',async e=>{
   if(a==='signout'){await auth.signOut();location.reload();return}
   if(a==='punch'&&isFri(today()))return toast('الجمعة إجازة، مفيش بصمة');
   if(a==='punch'&&b.dataset.k==='in'&&!punchOpen())return toast(`البصمة بتفتح الساعة ${OPEN()} الصبح`);
-  if(a==='punch'){const k=b.dataset.k,d=today();if(k==='out'){const g=outGate(S.me);if(!g.ok)return toast(g.why)}b.disabled=true;
+  if(a==='punch'){const k=b.dataset.k,d=today();if(k==='out'){const g=outGate(S.me);if(!g.ok)return toast(g.txt)}b.disabled=true;
     const ok=await save(()=>db.doc('checkins/'+S.me.id).set({empId:S.me.id,log:{[d]:{[k]:firebase.firestore.FieldValue.serverTimestamp()}}},{merge:true}),k==='in'?'اتسجّل حضورك':'اتسجّل انصرافك');if(!ok)b.disabled=false;return}
   if(a==='seedTeam'){b.disabled=true;const bt=db.batch();SEED.forEach(([id,name,roles])=>bt.set(db.doc('employees/'+id),{name,roles,role:roles[0],phone:'',email:''}));bt.set(db.doc('fin/main'),{photoPartner:'abdo-adel'},{merge:true});if(!await save(()=>bt.commit(),'الفريق اتضاف'))b.disabled=false;return}
   if(a==='slip')return sheetSlip(b.dataset.id);
@@ -2518,7 +2581,7 @@ document.addEventListener('click',async e=>{
     if(await save(()=>db.doc('plans/'+E.id).set(doc,{merge:true}),send&&E.raw?.status!=='sent'?'الخطة اتسلّمت ✓':'اتحفظت ✓')){E.raw={...(E.raw||{}),...doc,firstSentAt:null};planSheet()}else b.disabled=false;return}
   if(a==='plRate'){const r=+v('pl_rate');if(!r)return toast('اختار التقييم');if(await save(()=>db.doc('plans/'+S.edit.id).set({rating:r,ratedBy:S.me?.name||(S.fin?'الإدارة':'التيم ليدر'),cid:S.edit.cid,month:S.edit.m},{merge:true}),'التقييم اتحفظ ✓')){const first=!S.edit.data.rating;S.edit.data.rating=r;const P=S.plans?.[S.edit.id]||S.edit.data;if(P?.items){db.doc('cdocs/'+S.edit.cid+'_'+S.edit.m+'_plan').set({cid:S.edit.cid,month:S.edit.m,kind:'plan',items:P.items,at:firebase.firestore.FieldValue.serverTimestamp()}).catch(err);if(first)cNote(S.edit.cid,'خطة الشهر جاهزة، تقدر تشوفها من بيزنسي')}}return}
   if(a==='plPdf'){readPlan();const E=S.edit;b.disabled=true;const t=b.textContent;b.textContent='بيجهّز الـ PDF…';const box=document.getElementById('planPaper');if(box)box.outerHTML=planPaper(E);
-    try{await invPdf(null,'planPaper',`خطة ${String(E.name).replace(/[\\/:*?"<>|]/g,'')} ${E.m}.pdf`)}catch(e){console.warn(e);toast('ماقدرتش أعمل PDF، جرّب تاني')}b.disabled=false;b.textContent=t;return}
+    try{const X=E.data;await drawDocPdf({title:'خطة الشهر',meta:[E.name,mName(E.m)],qa:PLAN_Q.map(([k,l])=>[l,X.form?.[k]]),rows:monDays(E.m).filter(d=>(X.items?.[d]||[]).length).map(d=>({d:dLong(d),items:X.items[d].map(i=>({n:plN(i.t),c:plC(i.t),idea:i.idea||''}))}))},`خطة ${String(E.name).replace(/[\\/:*?"<>|]/g,'')} ${E.m}.pdf`)}catch(e){console.warn(e);toast('ماقدرتش أعمل PDF، جرّب تاني')}b.disabled=false;b.textContent=t;return}
   if(a==='briefView'){briefView(b.dataset.c,b.dataset.n);return}
   if(a==='briefReq'){const f=v('br_f'),t=v('br_t');if(!t)return toast('اكتب التعديل المطلوب');const E=S.edit;b.disabled=true;const label=(BRIEF_Q.find(x=>x[0]===f)||[,'عام'])[1];
     if(await save(()=>db.collection('briefReq').doc().set({cid:E.cid,cname:E.name,field:f||'',label,text:t.slice(0,600),emp:S.me?.id||'',name:S.me?.name||'',email:S.email,at:Date.now(),done:false}),'طلب التعديل اتبعت للتيم ليدر ✓')){document.getElementById('br_t').value='';pushAsk(`${E.name} · ${label}: ${t}`,'brief')}b.disabled=false;return}
@@ -2533,7 +2596,7 @@ document.addEventListener('click',async e=>{
     if(await save(()=>db.doc('briefs/'+E.cid).set(d,{merge:true}),'البريف اتحفظ ✓'))closeSheet();return}
   if(a==='briefReqDone'){await save(()=>db.doc('briefReq/'+b.dataset.id).update({done:true,doneBy:S.me?.name||(S.fin?'الإدارة':'التيم ليدر')}));if(S.edit?.kind==='brief')briefEdit(S.edit.cid);return}
   if(a==='repView'){ensureBriefs();repView(b.dataset.c);return}
-  if(a==='repPdf'){const r=S.reps?.[b.dataset.id];b.disabled=true;const t=b.textContent;b.textContent='بيجهّز الـ PDF…';try{await invPdf(null,'repPaper_'+r.id,`تقرير ${(clName(r.cid)||r.cname||'').replace(/[\\/:*?"<>|]/g,'')} ${r.month}.pdf`)}catch(e){console.warn(e);toast('ماقدرتش أعمل PDF، جرّب تاني')}b.disabled=false;b.textContent=t;return}
+  if(a==='repPdf'){const r=S.reps?.[b.dataset.id];b.disabled=true;const t=b.textContent;b.textContent='بيجهّز الـ PDF…';try{const cn=clName(r.cid)||r.cname||'';await drawDocPdf({title:'تقرير الشهر',meta:[cn,mName(r.month),r.name||''].filter(Boolean),nums:REP_N.map(([k,l])=>[l,r.nums?.[k]]),qa:REP_Q.map(([k,l])=>[l,r.ans?.[k]]),imgs:r.imgs||[]},`تقرير ${cn.replace(/[\\/:*?"<>|]/g,'')} ${r.month}.pdf`)}catch(e){console.warn(e);toast('ماقدرتش أعمل PDF، جرّب تاني')}b.disabled=false;b.textContent=t;return}
   if(a==='wsSend'){readWs();const W=S.wsDraft;if(!W.title)return toast('اكتب عنوان');if(!W.img&&!W.link)return toast('ضيف صورة أو لينك');if(!S.me)return;b.disabled=true;
     if(await save(()=>db.collection('workSubs').doc().set({cat:W.cat||'أخرى',title:W.title.slice(0,120),desc:(W.desc||'').slice(0,800),link:W.link?httpUrl(W.link):'',img:W.img||'',emp:S.me.id,name:S.me.name||'',email:S.email,at:Date.now(),status:'pending'}),'اتبعتت للمدير ✓')){S.wsDraft={};render();pushAsk(`${W.cat}: ${W.title}`,'work')}else b.disabled=false;return}
   if(a==='wsOk'||a==='wsNo'){const x=(S.wsSubs||[]).find(y=>y.id===b.dataset.id);if(!x)return;b.disabled=true;
@@ -2544,6 +2607,8 @@ document.addEventListener('click',async e=>{
     if(await save(()=>db.doc('asks/'+S.me.id).set({emp:S.me.id,name:S.me.name||'',list}),'اتبعتت للإدارة والتيم ليدر ✓')){S.myAsks=list;document.getElementById('ask_t').value='';pushAsk(t)}b.disabled=false;return}
   if(a==='msgSeen'||a==='msgReply'){if(!S.me||!S.myTask)return;const rp=a==='msgSeen'?'تم ✓':v('msg_r');if(!rp)return toast('اكتب الرد');b.disabled=true;S.myTask={...S.myTask,msgSeen:true,msgReply:rp.slice(0,300)};if(!await save(()=>db.doc('tasks/'+S.me.id+'_'+today()).update({msgSeen:true,msgReply:rp.slice(0,300)}),'الرد اتبعت ✓'))b.disabled=false;render();return}
   if(a==='rqOpen')return sheetReq(b.dataset.id);
+  if(a==='attExp'){S.attExp={...(S.attExp||{}),[b.dataset.k]:!(S.attExp||{})[b.dataset.k]};render();return}
+  if(a==='goMine'){document.getElementById('sec_mine')?.scrollIntoView({behavior:'smooth',block:'start'});return}
   if(a==='rqBoard')return sheetBoard(b.dataset.c,b.dataset.n);
   if(a==='rqNew'){S.edit=null;return sheetReqNew(b.dataset.c)}
   if(a==='rqType'){rqRead();const E=S.edit;E.type=b.dataset.k;E.to=rqDefTo(E.type,E.cid);return sheetReqNew()}
