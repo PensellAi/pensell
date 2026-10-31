@@ -450,7 +450,7 @@ function subMonth(){
   S.attLoaded=false;S.unsub.att=db.collection('attendance').where('date','>=',m+'-01').where('date','<=',m+'-31').onSnapshot(s=>{S.att={};s.docs.forEach(d=>S.att[d.id]=d.data());S.attLoaded=true;clearTimeout(S.csT);S.csT=setTimeout(syncClientStats,4000);rr()},err);
 }
 function subTasks(){if(S.unsubTasks)S.unsubTasks();S.tasks={};S.unsubTasks=db.collection('tasks').where('date','==',S.taskDate).onSnapshot(s=>{S.tasks={};s.docs.forEach(d=>{const x=d.data();S.tasks[x.emp]=x});rr()},err)}
-async function save(fn,ok){try{await fn();if(ok)toast(ok);return true}catch(e){console.warn(e);toast(e&&e.code==='permission-denied'?'مالكش صلاحية تعمل ده':'ماتحفظش، اتأكد من النت وجرّب تاني');return false}}
+async function save(fn,ok){try{await fn();S.fd={};if(ok)toast(ok);return true}catch(e){console.warn(e);toast(e&&e.code==='permission-denied'?'مالكش صلاحية تعمل ده':'ماتحفظش، اتأكد من النت وجرّب تاني');return false}}
 
 /* ---------- payroll engine ---------- */
 function compute(){
@@ -603,6 +603,7 @@ function render(){
   if(S.edit&&S.edit.kind==='view')sheetView(S.edit.id,true);
   {const hd=document.querySelector('header');if(hd)document.documentElement.style.setProperty('--navH',hd.offsetHeight+'px')}
   if(S.tab==='today')S.tab=S.mode==='app'&&(S.fin||S.tl)?'att':'me';main.innerHTML=({biz:vClient,brief:vBriefs,sum:vSum,today:vToday,reqs:vReqs,home:vHome,acc:vAcc,dist:vDist,team:vTeam,att:vAtt,tasks:vTasks,pay:vPay,star:vStar,site:vSite,free:vFree,rate:vRate,set:vSet,me:vCheckin,chat:vChat}[S.tab]||vCheckin)();
+  for(const[id,val]of Object.entries(S.fd||{})){const el=document.getElementById(id);if(el&&main.contains(el)&&el.type!=='file'&&el.value!==val)el.value=val}
   if(S.tab==='chat')paintChat(true);
   if(qa)document.getElementById('qa_name')?.focus();
 }
@@ -689,7 +690,7 @@ function planSheet(){const E=S.edit,X=E.data,R0=E.raw,sent=R0?.status==='sent',s
     <div class="small muted" style="margin-top:6px">دوس على أي يوم علشان تضيف أو تغيّر أو تكتب الفكرة.</div>${dayEd}</div>
    <div class="panel stack" style="gap:10px"><h3>فورم الخطة</h3>${PLAN_Q.map(([k,l])=>`<div class="field"><label class="label" for="pf_${k}">${l}</label><textarea id="pf_${k}" rows="2" ${ed?'':'disabled'}>${h(X.form[k]||'')}</textarea></div>`).join('')}</div>
    ${ed?`<div class="row"><button class="btn" data-act="plSave" data-s="draft">حفظ</button><button class="btn primary" data-act="plSave" data-s="sent">${sent?'حفظ التعديل':'تسليم الخطة'}</button></div>`:''}
-   ${E.lead?`<div class="panel stack" style="gap:8px;border-color:var(--accent)"><h3>اعتماد الخطة</h3>${R0?.tk?`<div class="small">${R0.apSig&&R0.apSig!==plSig(X.items)?'<span style="color:var(--gold)">⚠️ الخطة اتعدلت بعد الاعتماد. اعتمدها تاني علشان المهام تتحدث.</span>':'<span style="color:var(--good)">✓ معتمدة'+(R0.apBy?' · '+h(R0.apBy):'')+'</span>'}</div>`:'<div class="small muted">لما تعتمد الخطة، مهام كل يوم بتظهر لوحدها في «المهام والمتابعة» قدام كل كريتور، والتيم ليدر بيراجعها ويدوس «إرسال المهام».</div>'}<button class="btn primary" data-act="plAp" style="justify-content:center">✅ ${R0?.tk?'اعتمد التعديل':'اعتمد الخطة'}</button></div><div class="panel stack" style="gap:8px"><h3>تقييم الخطة</h3><div class="row">${stars('pl_rate',X.rating)}<button class="btn sm" data-act="plRate">حفظ التقييم</button></div><div class="row"><a class="btn good" target="_blank" rel="noopener" href="https://wa.me/${waPhone(S.briefs?.[E.cid]?.phone||cli(E.cid)?.phone)}?text=${encodeURIComponent(planText(E))}">إرسال للعميل واتساب</a><button class="btn" data-act="plPdf">PDF</button></div></div>`:''}
+   ${E.lead?`<div class="panel stack" style="gap:8px;border-color:var(--accent)"><h3>اعتماد الخطة</h3>${R0?.tk?`<div class="small">${R0.apSig&&R0.apSig!==plSig(X.items)?'<span style="color:var(--gold)">⚠️ الخطة اتعدلت بعد الاعتماد. اعتمدها تاني علشان المهام تتحدث.</span>':'<span style="color:var(--good)">✓ معتمدة'+(R0.apBy?' · '+h(R0.apBy):'')+'</span>'}</div>`:'<div class="small muted">لما تعتمد الخطة، مهام كل يوم بتظهر لوحدها في «المهام والمتابعة» قدام كل كريتور، والتيم ليدر بيراجعها ويدوس «إرسال المهام».</div>'}<button class="btn primary" data-act="plAp" style="justify-content:center">✅ ${R0?.tk?'اعتمد التعديل':'اعتمد الخطة'}</button></div><div class="panel stack" style="gap:8px"><h3>تقييم الخطة</h3><div class="row">${stars('pl_rate',X.rating)}<button class="btn sm" data-act="plRate">حفظ التقييم</button></div><div class="row"><a class="btn good" target="_blank" rel="noopener" href="https://wa.me/${waPhone(S.briefs?.[E.cid]?.phone||cli(E.cid)?.phone)}?text=${encodeURIComponent(planText(E))}">إرسال للعميل واتساب</a><button class="btn" data-act="plPdf">PDF</button>${cEmails(cli(E.cid)).length?`<button class="btn" data-act="plToBiz">ابعتها على «بيزنسي»</button>`:''}</div></div>`:''}
    <div style="position:absolute;left:-9999px;top:0;width:420px">${planPaper(E)}</div></div>`)}
 const planText=E=>{const X=E.data,L=monDays(E.m).filter(d=>(X.items[d]||[]).length);return `خطة ${mName(E.m)} · ${E.name}\nمن ${S.cfg.company||'Pensell'}\n\n`+(X.form.goal?`*الهدف:* ${X.form.goal}\n`:'')+(X.form.offers?`*العروض:* ${X.form.offers}\n`:'')+'\n'+L.map(d=>`${dLong(d)}: ${(X.items[d]||[]).map(i=>plN(i.t)+(i.idea?' ('+i.idea+')':'')).join('، ')}`).join('\n')};
 const planPaper=E=>{const X=E.data,L=monDays(E.m).filter(d=>(X.items[d]||[]).length);return `<div class="paper" id="planPaper">${paperHead('خطة الشهر',`<b>${h(E.name)}</b><br>${mName(E.m)}`)}<div class="paper-b">
@@ -740,9 +741,9 @@ function repSheet(){const E=S.edit,X=E.data,sent=X.status==='sent',when=X.sentAt
     ${(X.imgs||[]).length<4?`<input type="file" id="rep_file" accept="image/*" multiple>`:''}<div id="rep_up" class="small muted"></div></div>
    <div class="row"><button class="btn" data-act="repSave" data-s="draft">حفظ مسودة</button><button class="btn primary" data-act="repSave" data-s="sent">${sent?'تحديث وإرسال':'إرسال التقرير'}</button></div></div>`)}
 function readRep(){const X=S.edit.data;X.nums={};REP_N.forEach(([k])=>{const v=document.getElementById('rp_'+k)?.value.trim();if(v)X.nums[k]=v});X.ans={};REP_Q.forEach(([k])=>{const v=document.getElementById('rq_'+k)?.value.trim();if(v)X.ans[k]=v})}
-async function repOpen(cid,name){if(!S.me)return;const m=today().slice(0,7),id=repId(m,cid,S.me.id);openSheet(`<div class="empty"><h3>بيحمّل…</h3></div>`);
-  let X=S.myReps?.[id];if(!X){try{const d=await db.doc('reports/'+id).get();X=d.exists?d.data():null}catch(e){console.warn(e)}}
-  S.edit={kind:'rep',id,cid,name,m,data:JSON.parse(JSON.stringify({...(X||{}),sentAt:null,firstSentAt:null})),raw:X};if(X?.sentAt)S.edit.data.sentAt=X.sentAt;repSheet()}
+async function repOpen(cid,name,eid){const lead=isLead(),own=eid&&emp(eid)?emp(eid):S.me;if(!own&&!lead)return;const oid=own?.id||'adm',m=lead&&S.mode==='app'?S.month:today().slice(0,7),id=repId(m,cid,oid);openSheet(`<div class="empty"><h3>بيحمّل…</h3></div>`);
+  let X=S.myReps?.[id]||S.reps?.[id];if(!X){try{const d=await db.doc('reports/'+id).get();X=d.exists?d.data():null}catch(e){console.warn(e)}}
+  S.edit={kind:'rep',id,cid,name,m,owner:{id:oid,name:X?.name||own?.name||(S.fin?'الإدارة':'التيم ليدر'),email:X?.email||cleanEmail(own?.email||S.email)},data:JSON.parse(JSON.stringify({...(X||{}),sentAt:null,firstSentAt:null})),raw:X};if(X?.sentAt)S.edit.data.sentAt=X.sentAt;repSheet()}
 function shrinkShot(file){return new Promise((ok,no)=>{const r=new FileReader();r.onerror=no;r.onload=()=>{const im=new Image();im.onerror=no;im.onload=()=>{let W=im.naturalWidth,H=im.naturalHeight,max=900;if(W>max){H=Math.round(H*max/W);W=max}if(H>1600){W=Math.round(W*1600/H);H=1600}
   const cv=document.createElement('canvas');cv.width=W;cv.height=H;cv.getContext('2d').drawImage(im,0,0,W,H);let q=.75,d=cv.toDataURL('image/jpeg',q);while(d.length>190000&&q>.35){q-=.1;d=cv.toDataURL('image/jpeg',q)}ok(d)};im.src=r.result};r.readAsDataURL(file)})}
 const repPaper=(r,cname)=>`<div class="paper" id="repPaper_${r.id}">${paperHead('تقرير الشهر',`<b>${h(cname)}</b><br>${mName(r.month)}<br>${h(r.name||'')}`)}
@@ -766,7 +767,7 @@ function briefEdit(cid){ensureBriefs();const c=cli(cid),B=S.briefs?.[cid]||{},RQ
 function repView(cid){const c=cli(cid),L=Object.values(S.reps||{}).filter(r=>r.cid===cid&&r.month===S.month),req=Object.values(S.asg||{}).find(a=>a.clientId===cid&&a.month===S.month),crs=(req?.creator||[]).map(x=>x.e).filter(Boolean);
   const phone=waPhone(S.briefs?.[cid]?.phone||c?.phone);S.edit={kind:'repv',cid};
   openSheet(`<div class="sheet-h"><h3>تقرير ${mName(S.month)} · ${h(c?.name||'')}</h3><button class="x" data-act="close" aria-label="قفل">✕</button></div>
-   <div class="stack" style="gap:14px">${crs.filter(eid=>!L.some(r=>r.emp===eid&&r.status==='sent')).map(eid=>`<div class="notice">${h(emp(eid)?.name||'')} لسه مابعتش التقرير${L.some(r=>r.emp===eid)?' (فيه مسودة)':''}. آخر ميعاد 12 بالليل يوم ${dLong(monthEnd(S.month))}.</div>`).join('')}
+   <div class="stack" style="gap:14px"><div class="row" style="flex-wrap:wrap;gap:6px">${(crs.length?crs:[S.me?.id||'adm']).map(eid=>{const has0=L.some(r=>r.emp===eid);return `<button class="btn sm ${has0?'':'primary'}" data-act="repOpen" data-c="${cid}" data-n="${h(c?.name||'')}" data-e="${eid}">✏️ ${has0?'عدّل':'اكتب'} التقرير${crs.length>1?' · '+h(emp(eid)?.name||''):''}</button>`}).join('')}</div>${crs.filter(eid=>!L.some(r=>r.emp===eid&&r.status==='sent')).map(eid=>`<div class="notice">${h(emp(eid)?.name||'')} لسه مابعتش التقرير${L.some(r=>r.emp===eid)?' (فيه مسودة)':''}. آخر ميعاد 12 بالليل يوم ${dLong(monthEnd(S.month))}.</div>`).join('')}
    ${L.filter(r=>r.status==='sent').map(r=>`<div class="stack" style="gap:8px"><div class="small ${repOnTime(r)?'':'minus'}">${h(r.name||'')} · ${repOnTime(r)?'اتبعت في ميعاده ✓':'اتبعت متأخر'}</div>${repPaper(r,c?.name||'')}
      <div class="row"><a class="btn good" href="https://wa.me/${phone}?text=${encodeURIComponent(repText(r,c?.name||''))}" target="_blank" rel="noopener">إرسال للعميل واتساب</a><button class="btn" data-act="repPdf" data-id="${r.id}">PDF</button>${cEmails(c).length?`<button class="btn" data-act="repToBiz" data-id="${r.id}">ابعته على «بيزنسي»</button>`:''}</div></div>`).join('')||(crs.length?'':'<p class="small muted">مفيش كريتور متوزع على الأكونت ده الشهر ده.</p>')}</div>`)}
 /* ---------- حاجة عملتها تستاهل تنور في الموقع ---------- */
@@ -1037,14 +1038,14 @@ function leadReqsPanel(){if(!isLead())return '';const L=S.reqs||[],f=S.rqF||'act
 // في «صفحتي»: المطلوب منك، وأكونتاتك (للكريتور)، وطلباتك
 function reqsPanel(){const me=S.me,lead=isLead();if(!me&&!lead)return '';const L=S.reqs||[],TI=(S.myTask?.items||[]).map((x,i)=>[x,i]).filter(([x])=>x.k!=='rq'&&!(x.id&&String(x.id).startsWith('rq_')));
   const id=me?.id,ready=me?L.filter(r=>r.status==='ready'&&r.to===id):[],forMe=me&&has(me,'creator')?L.filter(r=>r.status==='ready'&&myCrAccs().some(a=>a.cid===r.cid)):[];
-  const td=today(),tm=nextWD(td),tmOk=!!S.dists?.[tm],mine=me?L.filter(r=>(r.to===id&&['todo','changes'].includes(r.status)&&(!['pl','mod'].includes(r.type)||r.due<=td))||(r.sendPend&&r.sendTo===id)):[],tmr=me&&tmOk?L.filter(r=>r.to===id&&r.due===tm&&['todo','changes'].includes(r.status)):[],asked=me?L.filter(r=>r.by===id&&r.to!==id&&!['pl','mod'].includes(r.type)&&!['done','rejected'].includes(r.status)):[];
+  const td=today(),tm=nextWD(td),open=me?L.filter(r=>(r.to===id&&['todo','changes'].includes(r.status))||(r.sendPend&&r.sendTo===id)):[],mine=open.filter(r=>!r.due||r.due<=td||r.sendPend),tmr=open.filter(r=>r.due&&r.due>td&&!r.sendPend),asked=me?L.filter(r=>r.by===id&&r.to!==id&&!['pl','mod'].includes(r.type)&&!['done','rejected'].includes(r.status)):[];
   const canReady=me&&['designer','editor','photographer','mediabuyer'].some(x=>has(me,x)),duty=lead?tlDutyRows():'';
   const sec=(t,html)=>html?`<div><div class="label" style="margin:6px 0 2px">${t}</div>${html}</div>`:'';
   return `<div class="panel" id="sec_mine"><div class="row between"><h3>مهامك</h3><span class="row" style="gap:6px">${mine.length?`<span class="pill red">${mine.length}</span>`:''}${canReady?`<button class="btn xs" data-act="rdNew">📦 شغل جاهز</button>`:''}</span></div>
    ${duty?sec(S.fin&&!me?'مهام الإدارة':'مهام التيم ليدر',duty):''}
-   ${sec('مطلوب منك النهارده',mine.sort((a,b)=>(a.dl||9e15)-(b.dl||9e15)).map(r=>rqRow(r)).join(''))}
+   ${sec('مهام النهارده',mine.sort((a,b)=>(a.dl||9e15)-(b.dl||9e15)).map(r=>rqRow(r)).join(''))}
    ${sec('مهام تانية النهارده',TI.map(([x,i])=>`<label class="trow" style="cursor:pointer"><input type="checkbox" data-act="taskDone" data-i="${i}" ${x.done?'checked':''} style="width:auto;margin:0"><span class="t grow" style="${x.done?'text-decoration:line-through;color:var(--muted)':''};min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h(x.t)}</span></label>`).join(''))}
-   ${sec(`مهام بكره (${rqDay(tm)})`,tmr.map(r=>rqRow(r)).join(''))}
+   ${[...new Set(tmr.map(r=>r.due))].sort().map(D=>sec(`مهام ${D===tm?'بكره':'يوم'} ${rqDay(D)}`,tmr.filter(r=>r.due===D).sort((a,b)=>(a.dl||9e15)-(b.dl||9e15)).map(r=>rqRow(r)).join(''))).join('')}
    ${sec('📦 شغل جاهز لأكونتاتك',forMe.map(x=>`<div class="trow"><button class="trow-m" data-act="rqOpen" data-id="${x.id}"><span class="tdot" style="background:#2F6FDB"></span><span class="t">${h(x.title||'')}<span class="muted"> · ${h(x.cname||'')} · ${h(x.toName||'')}</span></span></button><button class="btn xs good" data-act="rdPost" data-id="${x.id}">استخدمه كبوست</button></div>`).join(''))}
    ${sec('شغل سلّمته جاهز',ready.map(r=>rqRow(r,{noal:1})).join(''))}
    ${sec('اللي طلبته من التيم',asked.map(r=>rqRow(r,{who:1,noal:1})).join(''))}
@@ -1090,7 +1091,7 @@ async function rqMarkTask(r,patch){for(const d of [...new Set([r.due,today()].fi
     await ref.update({items:it.map(i=>i.id==='rq_'+r.id?{...i,...patch}:i)})}}
 // لما المدير يوافق على التسليم: بيتسجّل «تم فعلاً» في المتابعة اليومية النهارده
 /* ---------- المهام = المتابعة اليومية: الديدلاين، التأخير، توزيع التيم ليدر، ومهام الخطة ---------- */
-const DLS=()=>({cr:'16:00',dz:'20:00',edH:24,mbH:2,w0:'12:00',w1:'20:00',ds:'16:00',de:'18:00',pct:10,since:'',...(S.cfg?.dl||{})});
+const DLS=()=>({se:'12:00',cr:'16:00',dz:'20:00',edH:24,mbH:2,w0:'12:00',w1:'20:00',ds:'16:00',de:'18:00',pct:10,since:'',...(S.cfg?.dl||{})});
 const dAt=(d,t)=>new Date(d+'T'+(t||'00:00')+':00').getTime();
 const dStr=ms=>{const z=new Date(ms);return z.getFullYear()+'-'+String(z.getMonth()+1).padStart(2,'0')+'-'+String(z.getDate()).padStart(2,'0')};
 const nextWD=d=>{const x=new Date(d+'T12:00:00Z');do x.setUTCDate(x.getUTCDate()+1);while(x.getUTCDay()===5);return x.toISOString().slice(0,10)};
@@ -1112,7 +1113,7 @@ const dlTxt=ms=>{if(!ms)return '';const z=new Date(ms),d=dStr(ms);return (d===to
 const lateBadge=r=>{const x=lateH(r);return x?` <span class="pill red">متأخرة ${x} س</span>`:''};
 const dlBadge=r=>r.dl&&OPEN_ST.includes(r.status)?` <span class="small ${Date.now()>r.dl?'':'muted'}" style="${Date.now()>r.dl?'color:var(--bad)':''}">⏰ ${dlTxt(r.dl)}</span>`:'';
 // توزيع مهام اليوم D: التيم ليدر بيأكده في اليوم اللي قبله من 4 لـ 6
-const distDL=D=>dAt(prevWD(D),DLS().de);
+const distDL=D=>dAt(D,DLS().se||'12:00');
 const distOpen=D=>dAt(prevWD(D),DLS().ds);
 const distAt=D=>{const x=S.dists?.[D];return x?(x.at?.toMillis?.()||x.atMs||Date.now()):null};
 function distLate(){const L=DLS(),out={};if(!L.since)return out;const lim=nextWD(today());
@@ -1154,23 +1155,23 @@ function dayBoard(D,opts={}){const L=(S.reqs||[]).filter(r=>r.status!=='rejected
      <div class="list" style="margin-top:6px">${rs.sort((a,b)=>(ord[a.status]??5)-(ord[b.status]??5)).map(r=>`<div class="item" style="align-items:flex-start;padding:6px 0"><div class="grow" style="min-width:0"><span class="small">${h(r.title||RQ_T[r.type]?.n||'')}</span> <span class="small muted">· ${h(r.cname||'')}${r.due!==D?' · من '+rqDay(r.due):''}</span><div><span class="pill ${(RQ_S[r.status]||RQ_S.pending)[1]}">${(RQ_S[r.status]||RQ_S.pending)[0]}</span>${dlBadge(r)}${lateBadge(r)}</div></div><button class="btn xs" data-act="rqOpen" data-id="${r.id}">افتح</button></div>`).join('')}</div></details>`}).join('')}</div>`}
 // مهام التيم ليدر: توزيع بكره، الموافقات، المراجعة، والمتابعة كل ساعتين
 const h12t=t=>{const[a,b]=String(t).split(':').map(Number);return `${a>12?a-12:a||12}${b?':'+String(b).padStart(2,'0'):''} ${a<12?'الصبح':a<17?'الضهر':'بالليل'}`};
-function tlDutyData(){ensureBriefs();const L=DLS(),td=today(),m=td.slice(0,7),dN=+td.slice(8),dim=+monthEnd(m).slice(8),tm=nextWD(td),now=Date.now(),dn=S.dists?.[tm],o=distOpen(tm),dl=distDL(tm);
-  const crs=crewOf(tm),snt=S.att?.[tm]?.sent||{},nS=crs.filter(c=>snt[c.id]).length;
+function tlDutyData(){ensureBriefs();const L=DLS(),td=today(),m=td.slice(0,7),dN=+td.slice(8),dim=+monthEnd(m).slice(8),tm=nextWD(td),now=Date.now(),dn=S.dists?.[td],o=0,dl=distDL(td);
+  const crs=crewOf(td),snt=S.att?.[td]?.sent||{},nS=crs.filter(c=>snt[c.id]).length;
   const A=Object.values(S.asg||{}).filter(a=>a.month===m&&cli(a.clientId)&&cli(a.clientId).active!==false),inM=t=>{const z=t?.toDate?.();return z&&dStr(z.getTime()).startsWith(m)};
-  const noBrief=A.filter(a=>!inM(S.briefs?.[a.clientId]?.updatedAt)),noPlan=A.filter(a=>S.plans?.[planId(m,a.clientId)]?.status!=='sent'),noAp=A.filter(a=>{const P=S.plans?.[planId(m,a.clientId)];return P?.status==='sent'&&!P.tk});
+  const noBrief=A.filter(a=>{const B=S.briefs?.[a.clientId];return !B||!BRIEF_Q.some(([k])=>String(B[k]||'').trim())}),noPlan=A.filter(a=>S.plans?.[planId(m,a.clientId)]?.status!=='sent'),noAp=A.filter(a=>{const P=S.plans?.[planId(m,a.clientId)];return P?.status==='sent'&&!P.tk});
   const repNeed=A.flatMap(a=>{const e=(a.creator||[]).slice(-1)[0]?.e;return e?[[a,e]]:[]}),noRep=repNeed.filter(([a,e])=>S.reps?.[repId(m,a.clientId,e)]?.status!=='sent');
   const blocks=folBlocks(td),cks=(S.dfol?.[td]?.L||[]).map(x=>+x.ms||0);return{L,td,m,dN,dim,tm,now,dn,o,dl,crs,nS,A,noBrief,noPlan,noAp,repNeed,noRep,blocks,cks}}
 function tlDutyRows(){if(!isLead())return '';const D=tlDutyData(),{L,td,m,dN,dim,tm,now,dn,o,dl,crs,nS,A,noBrief,noPlan,noAp,repNeed,noRep,blocks,cks}=D,out=[];
-  if(noBrief.length||dN<=3)out.push(dutyRow('brief','📋','سجّل بريف كل أكونت',{ok:!noBrief.length,late:dN>3&&noBrief.length,txt:noBrief.length?`${A.length-noBrief.length}/${A.length} · لحد يوم 3`:'تم ✓'},'dutyInfo','data-k="brief"'));
+  if(noBrief.length)out.push(dutyRow('brief','📋','سجّل بريف الأكونتات الجديدة',{late:true,txt:`${noBrief.length} أكونت من غير بريف`},'dutyInfo','data-k="brief"'));
   if(noPlan.length||noAp.length||dN<=7)out.push(dutyRow('plan','📅','تابع الخطة مع الكريتور لحد ما تتسلّم وتتعتمد',{ok:!noPlan.length&&!noAp.length,late:dN>7&&noPlan.length,txt:noPlan.length||noAp.length?`${A.length-noPlan.length}/${A.length} · لحد يوم 7`:'تم ✓'},'dutyInfo','data-k="plan"'));
   if(dN>=dim-7)out.push(dutyRow('rep','📝','تابع تقارير الشهر',{ok:!noRep.length,txt:noRep.length?`${repNeed.length-noRep.length}/${repNeed.length} · لحد يوم ${dim}`:'تم ✓'},'dutyInfo','data-k="rep"'));
-  out.push(dutyRow('send','🗓️',`ابعت مهام ${rqDay(tm)} زي الخطة`,{ok:!!dn,late:!dn&&now>dl,txt:dn?'اتبعتت ✓':`${nS}/${crs.length} · لحد ${h12t(L.de)}`},'goSend'));
+  if(!isFri(td))out.push(dutyRow('send','🗓️','ابعت مهام النهارده زي الخطة',{ok:!!dn,late:!dn&&now>dl,txt:dn?'اتبعتت ✓':`${nS}/${crs.length} · لحد ${h12t(L.se||'12:00')}`},'goSend'));
   if(!isFri(td)){const cur=blocks.find(([a,b])=>now>=a&&now<b),doneCur=cur&&cks.some(t=>t>=cur[0]&&t<cur[1]),nd=blocks.filter(([a,b])=>cks.some(t=>t>=a&&t<b)).length;
     out.push(dutyRow('fol','👀','جولة متابعة التيم (كل ساعتين)',{ok:doneCur||(!cur&&nd===blocks.length),late:cur&&!doneCur&&now>cur[0]+36e5,txt:`${nd}/${blocks.length}${cur&&!doneCur?` · قبل ${h12t(hm(new Date(cur[1])))}`:''}`},'tlFollow'))}
   if(S.me)out.push(dutyRow('idea','💡','اقتراح أو فكرة تحسّن الشغل',{txt:`${(S.myIdeas||[]).filter(x=>x.month===m).length} الشهر ده`},'dutyInfo','data-k="idea"'));
   return out.join('')}
 function dutyInfo(k){const D=tlDutyData(),accB=(L2,act)=>L2.length?`<div class="row" style="flex-wrap:wrap;gap:6px">${L2.map(a=>`<button class="btn sm" data-act="${act}" data-c="${a.clientId}" data-n="${h(clName(a.clientId))}">${h(clName(a.clientId))}</button>`).join('')}</div>`:'<p class="small" style="color:var(--good);margin:0">كله تمام ✓</p>';
-  if(k==='brief')return sheetInfo('📋 بريف أول الشهر',`<p class="small muted" style="margin:0">⏰ آخر ميعاد يوم 3. دوس على الأكونت علشان تسجّل أو تحدّث البريف بتاعه.</p>${accB(D.noBrief,'briefEdit')}`);
+  if(k==='brief')return sheetInfo('📋 بريف الأكونتات الجديدة',`<p class="small muted" style="margin:0">البريف بيتسجّل مرة واحدة لكل أكونت ويفضل ثابت، وتقدر تعدّل عليه في أي وقت. دول أكونتات لسه مالهاش بريف:</p>${accB(D.noBrief,'briefEdit')}`);
   if(k==='plan')return sheetInfo('📅 خطط الشهر',`<p class="small muted" style="margin:0">⏰ آخر ميعاد يوم 7 الساعة 12 بالليل. تابع مع الكريتور لحد ما يسلّم، وبعدين اعتمدها.</p><div class="label">لسه ماتسلّمتش</div>${accB(D.noPlan,'planOpen')}<div class="label">اتسلّمت ومستنية اعتمادك</div>${accB(D.noAp,'planOpen')}`);
   if(k==='rep')return sheetInfo('📝 تقارير الشهر',`<p class="small muted" style="margin:0">⏰ آخر ميعاد آخر يوم في الشهر الساعة 12 بالليل.</p>${D.noRep.length?`<div class="small">${D.noRep.map(([a,e])=>h(emp(e)?.name||'')+' · '+h(clName(a.clientId))).join('<br>')}</div>`:'<p class="small" style="color:var(--good);margin:0">كله اتسلّم ✓</p>'}`);
   if(k==='idea'){const mi=(S.myIdeas||[]).filter(x=>x.month===D.m);return sheetInfo('💡 اقتراحات وأفكار',`<p class="small muted" style="margin:0">كل فكرة الإدارة تعجبها بتزوّد نقطك في نجم الشهر.</p><textarea id="idea_t" rows="3" placeholder="مثلاً: نعمل تمبلت ثابت لستوري العروض علشان الديزاين يخلص أسرع"></textarea><button class="btn primary" data-act="ideaSend" style="justify-content:center">ابعت الفكرة</button>${mi.length?`<div class="small">${mi.map(x=>`<div>${x.status==='good'?'⭐':x.status==='seen'?'👁️':'🕓'} ${h(x.t.slice(0,120))}</div>`).join('')}</div>`:''}`)}}
@@ -1242,8 +1243,8 @@ function rdRead(){const E=S.edit;if(E?.kind!=='ready')return;const g=id=>documen
 const ST_C={todo:'#9A8F90',changes:'var(--bad)',review:'var(--gold)',pending:'var(--gold)',rpend:'var(--gold)',ready:'#2F6FDB',done:'var(--good)'};
 const myAl=()=>{try{return JSON.parse(localStorage.getItem('pensell_al')||'{}')}catch(_){return {}}};
 const rqRow=(r,opt={})=>{const st=RQ_S[r.status]||RQ_S.pending,lt=lateH(r),al=myAl()[r.id],to=opt.who?(emp(r.to)?.name||r.toName||''):'';
-  return `<div class="trow"><button class="trow-m" data-act="rqOpen" data-id="${r.id}"><span class="tdot" style="background:${ST_C[r.status]||'var(--muted)'}" title="${st[0]}"></span><span class="t">${h(r.title||RQ_T[r.type]?.n||'')}<span class="muted"> · ${h(r.cname||'')}${to?' · '+h(to):''}</span></span><span class="mt">${lt?`<span style="color:var(--bad)">متأخرة ${lt}س</span>`:r.dl&&OPEN_ST.includes(r.status)?'⏰ '+hm(new Date(r.dl)):st[0]}</span></button>${opt.ap&&isLead()&&!['done','ready','rpend'].includes(r.status)?`<button class="btn xs good" data-act="rqApNow" data-id="${r.id}">اعتمد</button>`:''}${opt.noal?'':`<button class="tal ${al&&al>Date.now()?'on':''}" data-act="tAlarm" data-id="${r.id}" data-t="${h((r.title||'').slice(0,60))}" aria-label="منبه">${al&&al>Date.now()?'🔔':'⏰'}</button>`}</div>`};
-const dutyRow=(k,ic,t,meta,act,extra='')=>`<div class="trow"><button class="trow-m" data-act="${act}" ${extra}><span class="tdot" style="background:${meta.ok?'var(--good)':meta.late?'var(--bad)':'var(--gold)'}"></span><span class="t">${ic} ${t}</span><span class="mt">${meta.txt||''}</span></button><button class="tal" data-act="tAlarm" data-id="duty_${k}" data-t="${h(t)}" aria-label="منبه">⏰</button></div>`;
+  return `<div class="trow"><button class="trow-m" data-act="rqOpen" data-id="${r.id}"><span class="tdot" style="background:${ST_C[r.status]||'var(--muted)'}" title="${st[0]}"></span><span class="t">${h(r.title||RQ_T[r.type]?.n||'')}<span class="muted"> · ${h(r.cname||'')}${to?' · '+h(to):''}</span></span><span class="mt">${lt?`<span style="color:var(--bad)">متأخرة ${lt}س</span>`:r.dl&&OPEN_ST.includes(r.status)?'⏰ '+hm(new Date(r.dl)):st[0]}</span></button>${opt.ap&&isLead()&&!['done','ready','rpend'].includes(r.status)?`<button class="btn xs good" data-act="rqApNow" data-id="${r.id}">اعتمد</button>`:''}${opt.noal||1?'':`<button class="tal ${al&&al>Date.now()?'on':''}" data-act="tAlarm" data-id="${r.id}" data-t="${h((r.title||'').slice(0,60))}" aria-label="منبه">${al&&al>Date.now()?'🔔':'⏰'}</button>`}</div>`};
+const dutyRow=(k,ic,t,meta,act,extra='')=>`<div class="trow"><button class="trow-m" data-act="${act}" ${extra}><span class="tdot" style="background:${meta.ok?'var(--good)':meta.late?'var(--bad)':'var(--gold)'}"></span><span class="t">${ic} ${t}</span><span class="mt">${meta.txt||''}</span></button></div>`;
 function sheetAlarm(id,title){const now=new Date(Date.now()+30*6e4);S.edit={kind:'alarm',id,title};
   openSheet(`<div class="sheet-h"><div><h3>⏰ نبّهني</h3><div class="small muted">${h(title||'')}</div></div><button class="x" data-act="close" aria-label="قفل">×</button></div><div class="stack">
    <div class="grid2"><div class="field"><label class="label" for="al_d">يوم</label><input id="al_d" type="date" min="${today()}" value="${today()}"></div><div class="field"><label class="label" for="al_h">الساعة</label><input id="al_h" type="time" step="300" value="${hm(now)}"></div></div>
@@ -1310,7 +1311,7 @@ function outGate(e){const hr=has(e,'moderator')?23:20,now=new Date(),it=(S.myTas
 function vCheckin(){
   if(!S.empsLoaded)return `<div class="empty"><h3>بيحمّل…</h3></div>`;
   const e=S.me;
-  if(!e&&(S.fin||S.tl))return `<div class="stack" style="max-width:520px;margin:0 auto">${bellBar()}${asksInbox()}${notifBanner()}${reqsPanel()}${ideasInbox()}${leadReqsPanel()}${clientInbox()}${bizTeamBox()}${notifyBox()}${alarmBox()}${drivesBox(null)}<div class="panel"><h3>أدوات الـ AI</h3>${icoRow(AIT)}</div></div>`;
+  if(!e&&(S.fin||S.tl))return `<div class="stack" style="max-width:520px;margin:0 auto">${bellBar()}${asksInbox()}${notifBanner()}${reqsPanel()}${ideasInbox()}${leadReqsPanel()}${clientInbox()}${bizTeamBox()}${notifyBox()}${drivesBox(null)}<div class="panel"><h3>أدوات الـ AI</h3>${icoRow(AIT)}</div></div>`;
   if(!e)return `<div class="panel empty" style="max-width:460px;margin:0 auto"><h3>إيميلك مش متسجّل عندنا</h3><p>انت داخل بـ <b dir="ltr">${h(S.email)}</b>. ابعت الإيميل ده للإدارة علشان يضيفوه لاسمك، وبعدين افتح اللينك تاني.</p></div>`;
   const d=today(),p=(S.myLog||{})[d]||{},m=d.slice(0,7);
   const days=Object.entries(S.myLog||{}).filter(([k])=>k.startsWith(m)).sort((a,b)=>b[0].localeCompare(a[0]));
@@ -1325,7 +1326,7 @@ function vCheckin(){
   const lates=days.filter(([,x])=>lateKind(x.in)==='hard').length,soft=days.filter(([,x])=>lateKind(x.in)==='soft').length;
   return `<div class="stack" style="max-width:520px;margin:0 auto">
    ${bellBar()}${S.fin||S.tl?asksInbox():''}
-   <div class="panel stack" style="text-align:center;position:relative"><button class="tal" data-act="punchAl" aria-label="نبّهني لميعاد البصمة" title="نبّهني لميعاد البصمة كل يوم" style="position:absolute;top:10px;left:10px;font-size:20px">${(()=>{try{return localStorage.getItem('pensell_st')?'🔔':'⏰'}catch(_){return '⏰'}})()}</button><div class="muted">أهلاً ${h(e.name)}</div>
+   <div class="panel stack" style="text-align:center;position:relative"><div class="muted">أهلاً ${h(e.name)}</div>
     <div class="num" id="clk" style="font-family:var(--display);font-size:48px;font-weight:700;color:var(--ink-strong);line-height:1.1">${hm(new Date())}</div>
     <div class="muted">${dLong(d)} · البصمة من ${OPEN()} · الحضور لحد ${START()} والسماحية لحد ${GRACE()}</div>
     <div class="row" style="justify-content:center;gap:24px"><div><div class="label">حضور</div><b class="num">${p.in||'—'}</b><div>${latePill(p.in)}</div></div><div><div class="label">انصراف</div><b class="num">${p.out||'—'}</b></div></div>
@@ -1537,8 +1538,8 @@ async function pushSync(){if(S.mode==='client'&&S.email&&auth.currentUser){try{c
     const j=JSON.stringify(body);if(j===pushSyncJ)return;const t=await auth.currentUser.getIdToken();const r=await fetch(pushUrl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...body,idToken:t})});if(r.ok)pushSyncJ=j}catch(_){}return}
   if(!S.me||!S.email||!auth.currentUser||!await remReady())return;try{
   const d=today(),m=d.slice(0,7),crA=((S.myMine?.byMonth||{})[m]||[]).filter(a=>a.cid&&a.r==='كريتور'),body={action:'sync',name:S.me.name||'',ci:(S.myLog||{})[d]?.in?d:'',mod:has(S.me,'moderator'),cr:crA.length>0,pl:crA.filter(a=>S.myPlans?.[planId(m,a.cid)]?.status!=='sent').length,plm:m};
-  {let st='';try{st=localStorage.getItem('pensell_st')||''}catch(_){}body.st=st||'off'}
-  {const L=DLS(),tm=nextWD(d);body.tl=!!(S.tl||has(S.me,'teamleader'));if(body.tl){body.dh={s:hOf(L.ds),e:hOf(L.de),w0:hOf(L.w0),w1:hOf(L.w1)};body.distD=S.dists?.[tm]?tm:''}const D=myDls();if(D)body.dls=D}
+  body.st='off';
+  {const L=DLS(),tm=nextWD(d);body.tl=!!(S.tl||has(S.me,'teamleader'));if(body.tl){body.dh={s:Math.max(0,hOf(L.se)-1),e:hOf(L.se),w0:hOf(L.w0),w1:hOf(L.w1)};body.distD=S.dists?.[d]?d:''}const D=myDls();if(D)body.dls=D}
   if(S.myTaskLoaded===d){const it=S.myTask?.items||[];body.td={d,n:it.length,k:it.filter(x=>x.done).length}}
   if(notifPerm()==='granted'&&'serviceWorker' in navigator){const reg=await navigator.serviceWorker.ready;const sb=reg.pushManager&&await reg.pushManager.getSubscription();if(sb)body.sub=sb.toJSON()}
   const j=JSON.stringify(body);if(j===pushSyncJ)return;
@@ -2090,8 +2091,7 @@ function vSet(){
     <div class="field"><label class="label" for="dl_mb">الميديا باير (ساعات شغل)</label><input id="dl_mb" type="number" min="1" value="${h(L.mbH)}"></div>
     <div class="field"><label class="label" for="dl_w0">مواعيد الشغل من</label><input id="dl_w0" type="time" value="${h(L.w0)}"></div>
     <div class="field"><label class="label" for="dl_w1">لحد</label><input id="dl_w1" type="time" value="${h(L.w1)}"></div>
-    <div class="field"><label class="label" for="dl_ds">التيم ليدر يوزّع مهام بكره من</label><input id="dl_ds" type="time" value="${h(L.ds)}"></div>
-    <div class="field"><label class="label" for="dl_de">آخر سماحية للتوزيع</label><input id="dl_de" type="time" value="${h(L.de)}"></div>
+    <div class="field"><label class="label" for="dl_se">التيم ليدر يبعت مهام اليوم لحد (نفس اليوم)</label><input id="dl_se" type="time" value="${h(L.se||'12:00')}"></div>
    </div>
    <p class="small muted" style="margin:0">الديزاينر لو استلم بعد ميعاده، الديدلاين بيبقى نفس الميعاد تاني يوم. الميديا باير بتتحسبله ساعات جوه مواعيد الشغل بس. التأخير مالوش خصم: بيوصل تنبيه قبل الديدلاين بساعة، وتنبيه لما الديدلاين يعدّي، وبيظهر «متأخرة» للتيم ليدر. لما تغيّر المواعيد، المهام المفتوحة بتتحدّث على المواعيد الجديدة.</p>
    <div><button class="btn primary" data-act="saveDl">حفظ مواعيد المهام</button></div></div>`})()}
@@ -2308,7 +2308,8 @@ function sheetView(id,refresh){
 
 /* ---------- events ---------- */
 document.addEventListener('keydown',e=>{if(e.target.id==='sc_t'&&e.key==='Enter'&&!e.isComposing){e.preventDefault();document.querySelector('[data-act=scSend]')?.click()}});
-document.addEventListener('input',e=>{
+const FD_RX=/^(dl_|s_|nt_|ask_|ws_|mp_|pp_)/;const fdKeep=e=>{const t=e.target;if(t&&t.id&&FD_RX.test(t.id)&&t.type!=='file'&&document.getElementById('main')?.contains(t))(S.fd??={})[t.id]=t.value};
+document.addEventListener('input',e=>{fdKeep(e);
   if(S.edit?.kind==='free'&&/^fr_(price|base|mk|sp_)/.test(e.target.id||''))frCalc();
   if(e.target.id==='fr_xn'){const x=(S.extCli||[]).find(c=>c.name.trim()===e.target.value.trim()),p=document.getElementById('fr_xp');if(x&&p&&x.phone)p.value=x.phone}
   const t=e.target;
@@ -2326,7 +2327,7 @@ document.addEventListener('input',e=>{
   if(t.dataset.mod){(S.attDraft.mods[t.dataset.mod]??={s:'absent'}).cover=t.value||null}
   if(t.dataset.ad){const x=S.attDraft.ads?.[+t.dataset.i];if(x)x[t.dataset.ad]=t.dataset.ad==='amt'?(t.value===''?'':+t.value):t.value}
 });
-document.addEventListener('change',e=>{
+document.addEventListener('change',e=>{fdKeep(e);
   const t=e.target;
   if(t.id==='qa_role'){S.lastRole=t.value;return}
   if(t.dataset.en&&(t.dataset.f==='e'||t.dataset.f==='cv')&&S.attDraft){const x=S.attDraft[t.dataset.en]?.[+t.dataset.i];if(x){x[t.dataset.f]=t.value;const c=EN[t.dataset.en];if(c.asg){const al=accsFor(x.cv||x.e,c.asg);if(al.length&&!al.includes(x.a))x.a=''}}t.blur();render();return}
@@ -2521,12 +2522,12 @@ document.addEventListener('click',async e=>{
   if(a==='briefView'){briefView(b.dataset.c,b.dataset.n);return}
   if(a==='briefReq'){const f=v('br_f'),t=v('br_t');if(!t)return toast('اكتب التعديل المطلوب');const E=S.edit;b.disabled=true;const label=(BRIEF_Q.find(x=>x[0]===f)||[,'عام'])[1];
     if(await save(()=>db.collection('briefReq').doc().set({cid:E.cid,cname:E.name,field:f||'',label,text:t.slice(0,600),emp:S.me?.id||'',name:S.me?.name||'',email:S.email,at:Date.now(),done:false}),'طلب التعديل اتبعت للتيم ليدر ✓')){document.getElementById('br_t').value='';pushAsk(`${E.name} · ${label}: ${t}`,'brief')}b.disabled=false;return}
-  if(a==='repOpen'){repOpen(b.dataset.c,b.dataset.n);return}
+  if(a==='repOpen'){repOpen(b.dataset.c,b.dataset.n,b.dataset.e);return}
   if(a==='repImgRm'){readRep();S.edit.data.imgs.splice(+b.dataset.i,1);repSheet();return}
   if(a==='repSave'){readRep();const E=S.edit,X=E.data,send=b.dataset.s==='sent';if(send&&!Object.keys(X.ans||{}).length&&!Object.keys(X.nums||{}).length)return toast('جاوب على الأسئلة الأول');b.disabled=true;
-    const doc={cid:E.cid,cname:E.name,month:E.m,emp:S.me.id,name:S.me.name||'',email:S.email,ans:X.ans||{},nums:X.nums||{},imgs:X.imgs||[],status:send?'sent':(E.raw?.status==='sent'?'sent':'draft'),updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
+    const O=E.owner||{id:S.me?.id,name:S.me?.name||'',email:S.email},doc={cid:E.cid,cname:E.name,month:E.m,emp:O.id,name:O.name||'',email:O.email,...(O.email!==S.email?{editedBy:S.me?.name||(S.fin?'الإدارة':'التيم ليدر')}:{}),ans:X.ans||{},nums:X.nums||{},imgs:X.imgs||[],status:send?'sent':(E.raw?.status==='sent'?'sent':'draft'),updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
     if(send){doc.sentAt=firebase.firestore.FieldValue.serverTimestamp();doc.sentMs=Date.now();if(!E.raw?.firstSentAt){doc.firstSentAt=firebase.firestore.FieldValue.serverTimestamp();doc.firstSentMs=Date.now()}}
-    if(await save(()=>db.doc('reports/'+E.id).set(doc,{merge:true}),send?'التقرير اتبعت ✓':'المسودة اتحفظت')){closeSheet()}else b.disabled=false;return}
+    if(await save(()=>db.doc('reports/'+E.id).set(doc,{merge:true}),send?'التقرير اتبعت ✓':'المسودة اتحفظت')){if(isLead()&&S.mode==='app'){(S.reps??={})[E.id]={...(S.reps?.[E.id]||{}),...doc,id:E.id,sentMs:doc.sentMs||S.reps?.[E.id]?.sentMs};repView(E.cid)}else closeSheet()}else b.disabled=false;return}
   if(a==='briefEdit'){briefEdit(b.dataset.c);return}
   if(a==='briefSave'){const E=S.edit,d={cid:E.cid,updatedAt:firebase.firestore.FieldValue.serverTimestamp(),by:S.me?.name||(S.fin?'الإدارة':'التيم ليدر')};BRIEF_Q.forEach(([k])=>d[k]=v('bf_'+k));
     if(await save(()=>db.doc('briefs/'+E.cid).set(d,{merge:true}),'البريف اتحفظ ✓'))closeSheet();return}
@@ -2623,11 +2624,11 @@ document.addEventListener('click',async e=>{
   if(a==='tlFollow')return sheetFollow();
   if(a==='folSave'){const nm=S.me?.name||(S.fin?'الإدارة':'التيم ليدر'),note=v('fol_n'),late=(S.reqs||[]).filter(r=>r.due<=today()&&OPEN_ST.includes(r.status)&&lateH(r)).length;if(late&&!note)return toast('اكتب ملاحظة على المهام المتأخرة');b.disabled=true;
     const L=[...(S.dfol?.[today()]?.L||[]),{t:hm(new Date()),ms:Date.now(),by:nm,note:note.slice(0,500),late}];if(await save(()=>db.doc('dfol/'+today()).set({d:today(),m:today().slice(0,7),L},{merge:true}),'اتسجّلت المتابعة ✓')){(S.dfol??={})[today()]={d:today(),L};closeSheet()}else b.disabled=false;return}
-  if(a==='goSend'){S.attDate=nextWD(today());S.attDraft=null;S.tab='att';if(S.taskDate!==S.attDate){S.taskDate=S.attDate;subTasks()}if(S.attDate.slice(0,7)!==S.month){S.month=S.attDate.slice(0,7);subMonth()}closeSheet();render();setTimeout(()=>document.getElementById('sec_posts')?.scrollIntoView({behavior:'smooth'}),80);return}
+  if(a==='goSend'){S.attDate=today();S.attDraft=null;S.tab='att';if(S.taskDate!==S.attDate){S.taskDate=S.attDate;subTasks()}if(S.attDate.slice(0,7)!==S.month){S.month=S.attDate.slice(0,7);subMonth()}closeSheet();render();setTimeout(()=>document.getElementById('sec_posts')?.scrollIntoView({behavior:'smooth'}),80);return}
   if(a==='enSend'){S.sendAfter={k:b.dataset.k,e:b.dataset.e,to:document.getElementById('cvTo_'+b.dataset.e)?.value||''};document.querySelector('[data-act=saveAtt]')?.click();return}
   if(a==='rqApNow'){const r=(S.reqs||[]).find(x=>x.id===(b.dataset.id||S.edit?.id));if(!r)return;b.disabled=true;if(await save(()=>rqApproveNow(r),'اتعتمدت ✓ واتحسبت')){if(S.edit?.kind==='req')closeSheet()}else b.disabled=false;return}
-  if(a==='saveDl'){const g=id=>v(id),L=DLS(),dl={cr:g('dl_cr')||L.cr,dz:g('dl_dz')||L.dz,edH:Math.max(1,+g('dl_ed')||24),mbH:Math.max(1,+g('dl_mb')||2),w0:g('dl_w0')||L.w0,w1:g('dl_w1')||L.w1,ds:g('dl_ds')||L.ds,de:g('dl_de')||L.de,pct:0,since:L.since||today()};
-    if(dl.de<=dl.ds)return toast('آخر ميعاد للتوزيع لازم يكون بعد بدايته');if(dl.w1<=dl.w0)return toast('نهاية الشغل لازم تكون بعد بدايته');
+  if(a==='saveDl'){const g=id=>v(id),L=DLS(),dl={cr:g('dl_cr')||L.cr,dz:g('dl_dz')||L.dz,edH:Math.max(1,+g('dl_ed')||24),mbH:Math.max(1,+g('dl_mb')||2),w0:g('dl_w0')||L.w0,w1:g('dl_w1')||L.w1,se:g('dl_se')||L.se||'12:00',ds:L.ds,de:L.de,pct:0,since:L.since||today()};
+if(dl.w1<=dl.w0)return toast('نهاية الشغل لازم تكون بعد بدايته');
     if(await save(()=>db.doc('cfg/settings').set({dl},{merge:true}),'مواعيد المهام اتحفظت ✓')){S.cfg={...S.cfg,dl};const U=(S.reqs||[]).filter(r=>OPEN_ST.includes(r.status)&&r.dl&&!r.dlvAt&&['pl','design'].includes(r.type)).map(r=>[r,r.type==='pl'?dAt(r.due,dl.cr):dAt(dStr(r.dl),dl.dz)]).filter(([r,n])=>n!==r.dl);for(let i=0;i<U.length;i+=400){const bt=db.batch();U.slice(i,i+400).forEach(([r,n])=>bt.update(db.doc('reqs/'+r.id),{dl:n}));await bt.commit().catch(err)}if(U.length)toast(`اتحدّث ميعاد ${U.length} مهمة مفتوحة ✓`);render()}return}
   if(a==='cRateAsk'){const c=document.getElementById('ta_c')?.value;if(!c)return;const m=today().slice(0,7);if(await save(()=>db.doc('cdocs/'+c+'_rate_'+m).set({cid:c,kind:'rate',month:m,at:firebase.firestore.FieldValue.serverTimestamp()}),'اتبعت للعميل ✓'))cNote(c,'ياريت تقيّم شغلنا الشهر ده من «بيزنسي» ⭐');return}
   if(a==='taAsk'){const c=document.getElementById('ta_c')?.value;if(!c)return;S.taC=c;S.edit=null;return sheetTAsk(c)}
@@ -2673,6 +2674,7 @@ document.addEventListener('click',async e=>{
     S.edit={kind:'rqnew',cid:x.cid,type:ty,to:'',title:(CR_T.find(t=>t[0]===x.type)?.[1]||'')+' (طلب العميل)',desc:x.details||'',due:tomorrow(),n:1,amt:'',links:(x.links||[]).join('\n'),files:[],preRefs:x.files||[],fromCreq:x.id};S.edit.to=rqDefTo(ty,x.cid);return sheetReqNew()}
   if(a==='cwSeen'){await save(()=>db.doc('cwork/'+b.dataset.id).update({handled:true}));return}
   if(a==='crSeen'){await save(()=>db.doc('crate/'+b.dataset.id).update({seen:true}));return}
+  if(a==='plToBiz'){readPlan();const E=S.edit;if(await save(()=>db.doc('cdocs/'+E.cid+'_'+E.m+'_plan').set({cid:E.cid,month:E.m,kind:'plan',items:E.data.items,at:firebase.firestore.FieldValue.serverTimestamp()}),'الخطة اتبعتت على «بيزنسي» ✓'))cNote(E.cid,'خطة الشهر جاهزة، تقدر تشوفها من بيزنسي');return}
   if(a==='repToBiz'){const r=Object.values(S.reps||{}).find(x=>x.id===b.dataset.id);if(!r)return;const c=cli(r.cid);if(await save(()=>db.doc('cdocs/'+r.cid+'_'+r.month+'_report').set({cid:r.cid,month:r.month,kind:'report',text:repText(r,c?.name||''),at:firebase.firestore.FieldValue.serverTimestamp()}),'التقرير اتبعت على «بيزنسي» ✓'))cNote(r.cid,'تقرير الشهر جاهز، تقدر تشوفه من بيزنسي');return}
   if(a==='ofOpen')return sheetOffer(b.dataset.id);
   if(a==='ofAll'){S.ofAll=!S.ofAll;render();return}
@@ -2698,7 +2700,7 @@ document.addEventListener('click',async e=>{
     document.getElementById('nt_t').value='';toast(`المنبه هيرن ${rqDay(dd)} الساعة ${String(H).padStart(2,'0')}:${String(m5).padStart(2,'0')} ✓`);return}
   if(a==='sendNotif'){const to=v('nt_to'),t=(document.getElementById('nt_t')?.value||'').trim();if(!t)return toast('اكتب الرسالة');b.disabled=true;
     try{const tok=await auth.currentUser.getIdToken(),r=await fetch(pushUrl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(to.startsWith('c:')?{action:'cnotify',idToken:tok,cids:to==='c:all'?(S.clients||[]).filter(c=>c.active!==false&&cEmails(c).length).map(c=>c.id):[to.slice(2)],t:t.slice(0,300)}:{action:'notify',idToken:tok,to:to==='team'?'team':[to],text:t.slice(0,300)})}),j=await r.json();
-      if(!r.ok)throw new Error(j.error||r.status);document.getElementById('nt_t').value='';toast(to.startsWith('c:')?`اتبعت ✓ هيلاقيه العميل في جرس «بيزنسي»${j.people?` · وصل موبايل ${j.people}`:''}`:j.sent?`الإشعار وصل لـ ${j.people} ${j.people===1?'شخص':'أشخاص'} ✓`:'محدش من اللي اخترتهم مفعّل الإشعارات')}catch(e){console.warn(e);toast('الإشعار ماتبعتش، جرّب تاني')}b.disabled=false;return}
+      if(!r.ok)throw new Error(j.error||r.status);document.getElementById('nt_t').value='';S.fd={};toast(to.startsWith('c:')?`اتبعت ✓ هيلاقيه العميل في جرس «بيزنسي»${j.people?` · وصل موبايل ${j.people}`:''}`:j.sent?`الإشعار وصل لـ ${j.people} ${j.people===1?'شخص':'أشخاص'} ✓`:'محدش من اللي اخترتهم مفعّل الإشعارات')}catch(e){console.warn(e);toast('الإشعار ماتبعتش، جرّب تاني')}b.disabled=false;return}
   if(a==='askDone'){const d=(S.asksAll||[]).find(x=>x.id===b.dataset.e);if(!d)return;const me=S.emps.find(e=>(e.email||'')===S.email);
     const list=(d.list||[]).map(x=>x.id===b.dataset.id?{...x,done:true,doneDay:today(),by:me?.name||(S.fin?'الإدارة':'التيم ليدر')}:x);await save(()=>db.doc('asks/'+d.id).update({list}));return}
   if(a==='taskDone'){const T=S.myTask;if(!T)return;const items=(T.items||[]).map((x,i)=>i===+b.dataset.i?{...x,done:b.checked}:x);S.myTask={...T,items};
