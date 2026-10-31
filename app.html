@@ -1402,7 +1402,7 @@ function notifyBox(){if(!S.fin)return '';const list=S.emps.filter(e=>!isOwnerEmp
    <textarea id="nt_t" rows="2" placeholder="الرسالة، مثلاً: ميتنج الساعة 3 / متنسوش تقفلوا مهام النهارده"></textarea>
    <div><button class="btn primary" data-act="sendNotif">ابعت</button></div>
    <p class="small muted" style="margin:0">بيوصل دلوقتي للي مفعّل الإشعارات على موبايله أو الكمبيوتر.</p></div>`}
-function alarmBox(){if(!S.fin)return '';const list=S.emps.filter(e=>!isOwnerEmp(e)&&e.email);const now=new Date(Date.now()+30*6e4);
+function alarmBox(){return '';const list=S.emps.filter(e=>!isOwnerEmp(e)&&e.email);const now=new Date(Date.now()+30*6e4);
   return `<div class="panel stack" style="gap:8px"><h3>⏰ منبه</h3>
    <div class="field"><label class="label" for="al2_to">لمين</label><select id="al2_to"><option value="team">التيم كله</option>${list.map(e=>`<option value="${h(cleanEmail(e.email))}">${h(e.name)}</option>`).join('')}</select></div>
    <input id="al2_t" placeholder="الرسالة، مثلاً: ميتنج الساعة 5">
