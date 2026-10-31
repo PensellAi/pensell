@@ -8,20 +8,20 @@ service firebase.storage {
     // ملفات طلبات الأكونتات (الريفرنس والتسليم): اللي يشوف الطلب بس
     match /reqs/{rid}/{file} {
       allow read: if request.auth != null && (lead() || sees(rid));
-      allow create: if request.auth != null && request.resource.size < 50 * 1024 * 1024 && (lead() || sees(rid));
+      allow create: if request.auth != null && request.resource.size < 100 * 1024 * 1024 && (lead() || sees(rid));
       allow delete: if request.auth != null && lead();
     }
     // «بيزنسي»: ملفات طلبات العميل وسكرين التحويل
     match /creqs/{cid}/{file} {
       allow read: if request.auth != null && (lead() || clientOf(cid));
-      allow create: if request.auth != null && request.resource.size < 25 * 1024 * 1024 && (lead() || clientOf(cid));
+      allow create: if request.auth != null && request.resource.size < 100 * 1024 * 1024 && (lead() || clientOf(cid));
       allow delete: if request.auth != null && lead();
     }
     function onAcc(cid) { return em() in firestore.get(/databases/(default)/documents/chats/$('c_' + cid)).data.emails; }
     // «خد رأي العميل»: التيم اللي على الأكونت بيرفع، والعميل بيشوف
     match /cask/{cid}/{file} {
       allow read: if request.auth != null && (lead() || clientOf(cid) || onAcc(cid));
-      allow create: if request.auth != null && request.resource.size < 25 * 1024 * 1024 && (lead() || onAcc(cid));
+      allow create: if request.auth != null && request.resource.size < 100 * 1024 * 1024 && (lead() || onAcc(cid));
       allow delete: if request.auth != null && lead();
     }
     match /cinv/{cid}/{file} {    match /cinv/{cid}/{file} {

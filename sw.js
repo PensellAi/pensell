@@ -1,5 +1,5 @@
 // Pensell: بيخلّي التطبيق يفتح على طول من الموبايل، ويجيب التحديثات في الخلفية.
-const CACHE='pensell-v4';
+const CACHE='pensell-v5';
 const CORE=['/app.html','/logo-l.png','/logo-d.png','/icon-192.png'];
 self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE)).catch(()=>{}))});
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
@@ -19,12 +19,13 @@ self.addEventListener('fetch',e=>{
 });
 // ---------- الإشعارات ----------
 self.addEventListener('push',e=>{let d={};try{d=e.data.json()}catch(_){d={title:'Pensell',body:e.data?e.data.text():''}}
-  const call=d.kind==='call',opt={body:d.body||'',tag:d.tag||'pensell',renotify:true,icon:'/icon-192.png',badge:'/icon-192.png',data:{url:d.url||'/app.html'},
+  const call=d.kind==='call'||d.kind==='alarm',opt={body:d.body||'',tag:d.tag||'pensell',renotify:true,icon:'/icon-192.png',badge:'/icon-192.png',data:{url:d.url||'/app.html'},
     vibrate:call?[1000,400,1000,400,1000,400,1000,400,1000,400,1000]:[250,100,250,100,500],requireInteraction:call,silent:false};
-  if(call)opt.actions=[{action:'join',title:'انضم'}];
+  if(d.kind==='call')opt.actions=[{action:'join',title:'انضم'}];
   e.waitUntil(self.clients.matchAll({type:'window',includeUncontrolled:true}).then(cs=>{
     // لو التطبيق مفتوح قدامه، هو اللي بيرن ويعرض التنبيه بنفسه
-    if(cs.some(c=>c.visibilityState==='visible'&&new URL(c.url).pathname==='/app.html'))return;
+    if(d.kind==='alarm')cs.forEach(c=>c.postMessage({type:'alarm',title:d.title,body:d.body}));
+    if(d.kind!=='alarm'&&cs.some(c=>c.visibilityState==='visible'&&new URL(c.url).pathname==='/app.html'))return;
     return self.registration.showNotification(d.title||'Pensell',opt)}))});
 self.addEventListener('notificationclick',e=>{e.notification.close();const url=e.notification.data?.url||'/app.html';
   e.waitUntil(self.clients.matchAll({type:'window',includeUncontrolled:true}).then(cs=>{const c=cs.find(x=>new URL(x.url).pathname==='/app.html');
