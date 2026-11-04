@@ -428,7 +428,7 @@ async function start(u){
   db.doc('chatRead/'+S.email).onSnapshot(s=>{S.chatRead=s.exists?s.data().m||{}:{};rr()},err);
   db.doc('stars/latest').onSnapshot(s=>{S.star=s.exists?s.data():null;rr()},err);
   if(S.mode==='app'){
-    db.collection('clients').onSnapshot(s=>{S.clients=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.code||0)-(b.code||0));S.clientsLoaded=1;if(S.fin)setTimeout(cleanClients,3000);setTimeout(syncClientChats,2500);setTimeout(syncAccChats,3500);rr()},err);
+    db.collection('clients').onSnapshot(s=>{S.clients=s.docs.map(d=>{const x={id:d.id,...d.data()};if(x.active!==false&&x.endDate&&x.endDate<today().slice(0,7)+'-01'){x.active=false;x.gone=true}return x}).sort((a,b)=>(a.code||0)-(b.code||0));S.clientsLoaded=1;if(S.fin)setTimeout(cleanClients,3000);setTimeout(syncClientChats,2500);setTimeout(syncAccChats,3500);rr()},err);
     db.collection('checkins').onSnapshot(s=>{S.checks={};s.docs.forEach(d=>S.checks[d.id]=normLog(d.data(SNAP).log));rr()},err);
   }
   if(S.fin){
@@ -758,6 +758,12 @@ const BRIEF_Q=[['sells','بيبيع إيه؟'],['offers','بيقدّم إيه ب
 const REP_N=[['followers','الفولورز آخر الشهر'],['reach','الوصول (Reach)'],['engagement','التفاعل (Engagement)']];
 const REP_Q=[['results','نتايج البيدج الشهر ده'],['best','أحسن محتوى نجح الشهر ده وليه'],['problems','المشاكل اللي واجهتك'],['challenges','التحديات اللي عملتها وإزاي اتعاملت معاها'],['next','اقتراحاتك للشهر الجاي']];
 const monthEnd=m=>{const[y,mo]=m.split('-').map(Number);return m+'-'+String(new Date(y,mo,0).getDate()).padStart(2,'0')};
+// بداية ونهاية الشغل مع الأكونت: الأكونت اللي وقف بيفضل في شهر وقوفه ومايظهرش في اللي بعده
+const cEnd=c=>c?.endDate||'',cStart=c=>c?.startDate||'';
+const cLiveIn=(c,m)=>!!c&&!(cEnd(c)&&cEnd(c)<m+'-01')&&!(cStart(c)&&cStart(c)>monthEnd(m))&&(c.active!==false||(!!cEnd(c)&&cEnd(c)>=m+'-01'));
+// أيام الشغل في الشهر (من أول يوم لآخر يوم)
+const cDaysIn=(c,m)=>{const a=cStart(c)&&cStart(c)>m+'-01'?cStart(c):m+'-01',b=cEnd(c)&&cEnd(c)<monthEnd(m)?cEnd(c):monthEnd(m);return a>b?0:Math.round((new Date(b+'T12:00')-new Date(a+'T12:00'))/864e5)+1};
+const dimOf=m=>+monthEnd(m).slice(8);
 const repId=(m,cid,eid)=>`${m}_${cid}_${eid}`;
 const repOnTime=r=>{if(!r||r.status!=='sent')return false;const t=r.firstSentAt?.toDate?r.firstSentAt.toDate():r.firstSentMs?new Date(r.firstSentMs):null;if(!t)return false;const[y,mo]=r.month.split('-').map(Number);return t<=new Date(y,mo,0,23,59,59,999)};
 // الأكونتات اللي الكريتور مطلوب منه تقريرها في الشهر
@@ -1948,12 +1954,13 @@ function vHome(){syncTotals();
 }
 function vAcc(){syncTotals();
   if(!S.clients.length)return `<div class="panel empty"><h3>لسه مفيش عملاء</h3><p>ضيف أول عميل، وبعدين سجّله في الشهر بباقة الإدارة وباقة التصوير لو فيه.</p><button class="btn primary" data-act="editClient">+ عميل جديد</button></div>`;
-  const act=S.clients.filter(c=>c.active!==false),missing=act.filter(c=>!S.recs.some(r=>r.clientId===c.id));
+  const act=S.clients.filter(c=>cLiveIn({...c,active:c.gone?true:c.active},S.month)||S.recs.some(r=>r.clientId===c.id)),missing=act.filter(c=>cLiveIn({...c,active:c.gone?true:c.active},S.month)&&!S.recs.some(r=>r.clientId===c.id));
   return `<div class="stack">${demoBanner()}<div class="row between"><h2>أكونتات ${mName(S.month)}</h2><div class="row">${missing.length?`<button class="btn dark" data-act="startMonth">جهّز الشهر من اللي فات</button>`:''}<button class="btn primary" data-act="editClient">+ عميل جديد</button></div></div>
   <div class="panel"><div class="list">${act.map(c=>{
     const r=S.recs.find(x=>x.clientId===c.id);
     const st=!r?'<span class="pill none">مش متسجّل الشهر ده</span>':r.status==='paid'?'<span class="pill paid">اتدفعت</span>':carriedTo(r)?'<span class="pill red">اترحّلت للشهر اللي بعده</span>':arrearsOf(r).length?'<span class="pill unpaid">مستنية الدفع · فيها متأخرات</span>':'<span class="pill unpaid">مستنية الدفع</span>';
-    return `<div class="item"><div class="grow"><b>${h(c.name)}</b>${c.demo?'<span class="demo">مثال</span>':''}
+    const live=cLiveIn({...c,active:c.gone?true:c.active},S.month),dd=cDaysIn(c,S.month),dimM=dimOf(S.month);
+    return `<div class="item"><div class="grow"><b>${h(c.name)}</b>${c.demo?'<span class="demo">مثال</span>':''}${!live?`<span class="pill red">${cStart(c)&&cStart(c)>monthEnd(S.month)?'بيبدأ '+dLong(cStart(c))+' · الفاتورة دي زيادة':cEnd(c)?'وقف يوم '+dLong(cEnd(c))+' · الفاتورة دي زيادة، امسحها من «تعديل»':'متوقف · اكتب آخر يوم شغل من «تعديل»'}</span>`:cEnd(c)&&cEnd(c)<=monthEnd(S.month)?`<span class="pill unpaid">آخر يوم ${dLong(cEnd(c))}</span>`:''}${live&&cStart(c)&&cStart(c)>S.month+'-01'?`<span class="pill unpaid">بدأ ${dLong(cStart(c))}</span>`:''}${live&&dd<dimM?`<span class="small muted"> · اشتغلنا ${dd} يوم من ${dimM}</span>`:''}
       <div class="row" style="gap:6px;margin-top:4px">${r?`<span class="pkg ${r.mgmt?.on?'on':''}">إدارة${r.mgmt?.on?' '+money(r.mgmt.price):''}</span><span class="pkg ${photoOn(r)?'on':''}">تصوير${photoOn(r)?' '+money(r.photo?.price):''}</span>${photoOn(r)&&!+r.photo?.price?'<span class="pill red">فيه تصوير · حدد سعر الباقة</span>':''}`:`<span class="small muted">اضغط «سجّل الشهر» وحدد الباقات والفريق</span>${dailyPhoto().sh[c.id]||dailyPhoto().ed[c.id]?'<span class="pill red">فيه تصوير الشهر ده</span>':''}${dailyAds()[c.id]?'<span class="pill red">فيه إعلانات ممولة</span>':''}`}</div></div>
      ${r?`<span class="amt">${egp(grandTotal(r))}</span>`:''}${st}
      <div class="row"><button class="btn sm" data-act="editRec" data-c="${c.id}">${r?'تعديل':'سجّل الشهر'}</button>${r&&recTotal(r)?`<button class="btn sm primary" data-act="viewInv" data-id="${r.id}">الفاتورة</button>`:''}</div></div>`}).join('')}</div></div></div>`;
@@ -2245,6 +2252,7 @@ function sheetClient(id){
   <div class="stack"><div class="field"><label class="label" for="c_name">اسم العميل / البراند</label><input id="c_name" value="${h(c.name)}"></div>
   <div class="field"><label class="label" for="c_phone">رقم الواتساب</label><input id="c_phone" inputmode="tel" value="${h(c.phone)}" placeholder="010xxxxxxxx"></div>
   <div class="field"><label class="label" for="c_emails">إيميلات جوجل للدخول على «بيزنسي»</label><textarea id="c_emails" rows="2" dir="ltr" placeholder="owner@gmail.com&#10;marketing@gmail.com">${h(cEmails(c).join('\n'))}</textarea><p class="small muted" style="margin:0">كل إيميل في سطر. العميل بيدخل بيه من زرار «تسجيل الدخول» في الموقع، أو من اللينك ده: <span dir="ltr">${h(SITE_URL())}app.html</span></p></div>
+  <div class="grid2"><div class="field"><label class="label" for="c_start">أول يوم شغل معانا</label><input id="c_start" type="date" value="${h(cStart(c))}"></div><div class="field"><label class="label" for="c_end">آخر يوم شغل (لو وقف)</label><input id="c_end" type="date" value="${h(cEnd(c))}"></div></div>
   <div class="row between"><button class="btn primary" data-act="saveClient">حفظ</button>${id?`<div class="row"><button class="btn" data-act="archClient">${c.active===false?'رجّعه':'وقّف التعامل'}</button><button class="btn danger" data-act="delAsk" data-what="client">مسح</button></div>`:''}</div><div id="delZone"></div></div>`)
 }
 function sheetEmp(id){
@@ -2269,8 +2277,11 @@ function drawRec(){
   const mp={...F.mgmtPct,...m.pct},pp=photoP(ph),nSes=photoSessions({...S.edit.rec,clientId}).length;
   openSheet(`<div class="sheet-h"><div><h3>${h(c.name)}</h3><div class="small muted">${mName(S.month)}</div></div><button class="x" data-act="close" aria-label="قفل">×</button></div>
   <div class="stack">
-   <div class="sec"><h4>بيانات العميل</h4><div class="grid2" style="margin-top:6px"><div class="field"><label class="label" for="rc_name">اسم العميل / البراند</label><input id="rc_name" value="${h(S.edit.cName??c.name)}"></div><div class="field"><label class="label" for="rc_phone">رقم الواتساب</label><input id="rc_phone" inputmode="tel" value="${h(S.edit.cPhone??c.phone??'')}" placeholder="010xxxxxxxx"></div></div><div class="field" style="margin-top:8px"><label class="label" for="rc_emails">إيميلات جوجل للدخول على «بيزنسي»</label><textarea id="rc_emails" rows="2" dir="ltr" placeholder="owner@gmail.com">${h((S.edit.cEmails??cEmails(c)).join('\n'))}</textarea><p class="small muted" style="margin:0">كل إيميل في سطر. العميل بيدخل بيه من «تسجيل الدخول» في الموقع.</p></div></div>
+   <div class="sec"><h4>بيانات العميل</h4><div class="grid2" style="margin-top:6px"><div class="field"><label class="label" for="rc_name">اسم العميل / البراند</label><input id="rc_name" value="${h(S.edit.cName??c.name)}"></div><div class="field"><label class="label" for="rc_phone">رقم الواتساب</label><input id="rc_phone" inputmode="tel" value="${h(S.edit.cPhone??c.phone??'')}" placeholder="010xxxxxxxx"></div></div><div class="field" style="margin-top:8px"><label class="label" for="rc_emails">إيميلات جوجل للدخول على «بيزنسي»</label><textarea id="rc_emails" rows="2" dir="ltr" placeholder="owner@gmail.com">${h((S.edit.cEmails??cEmails(c)).join('\n'))}</textarea><p class="small muted" style="margin:0">كل إيميل في سطر. العميل بيدخل بيه من «تسجيل الدخول» في الموقع.</p></div>
+     <div class="grid2" style="margin-top:8px"><div class="field"><label class="label" for="rc_start">أول يوم شغل معانا</label><input id="rc_start" type="date" value="${h(S.edit.cStart??cStart(c))}"></div><div class="field"><label class="label" for="rc_end">آخر يوم شغل (لو وقف)</label><input id="rc_end" type="date" value="${h(S.edit.cEnd??cEnd(c))}"></div></div>
+     <p class="small muted" style="margin:0">لو الأكونت وقف، اكتب آخر يوم: بيفضل ظاهر في الشهر ده بس ومابيتعملوش فاتورة في الشهور اللي بعده. لو بدأ في نص الشهر اكتب أول يوم.</p></div>
    <div class="sec ${m.on?'':'off'}"><div class="sec-h"><label><input type="checkbox" id="m_on" ${m.on?'checked':''} data-act="togPkg"> باقة الإدارة</label>${m.on?`<div style="width:150px"><input id="m_price" type="number" min="0" value="${m.price||''}" placeholder="سعر الباقة" aria-label="سعر باقة الإدارة"></div>`:''}</div>
+   ${m.on?(()=>{const dimM=dimOf(S.month),cc={...c,startDate:S.edit.cStart??cStart(c),endDate:S.edit.cEnd??cEnd(c)},auto=cDaysIn(cc,S.month),days=m.days??auto;return days<dimM||m.full?`<div class="grid2" style="margin-top:8px"><div class="field"><label class="label" for="m_full">سعر الشهر كامل</label><input id="m_full" type="number" min="0" value="${m.full||m.price||''}" placeholder="مثلاً 10000"></div><div class="field"><label class="label" for="m_days">أيام الشغل من ${dimM}</label><input id="m_days" type="number" min="0" max="${dimM}" value="${days}"></div></div><p class="small muted" style="margin:0">لما تكتب سعر الشهر كامل، سعر الباقة بيتحسب على قد الأيام (${days} من ${dimM} يوم${m.full?' = '+money(Math.round(m.full*days/dimM))+' ج':''}) لما تدوس حفظ. وتقدر تعدّل السعر بإيدك.</p>`:''})():''}
    ${m.on?`<div class="stack" style="margin-top:12px;gap:10px">
      <div class="grid3"><div class="field"><label class="label" for="mn_p">حد أدنى بوستات</label><input id="mn_p" type="number" min="0" value="${m.min?.posts??''}" placeholder="${F.minPosts??15}"></div>
       <div class="field"><label class="label" for="mn_s">حد أدنى ستوري</label><input id="mn_s" type="number" min="0" value="${m.min?.stories??''}" placeholder="${F.minStories??10}"></div>
@@ -2301,7 +2312,7 @@ function drawRec(){
      <div class="chips" style="margin-top:8px">${SUB_P.map(([p,k])=>`<button class="chip" data-act="addAdj" data-l="subs" data-d="${p}" data-k="${k}">− ${p}</button>`).join('')}</div></div>
    <div class="row between"><span class="label">المطلوب في الفاتورة</span><b class="amt" id="recTot" style="font-size:22px">${egp(recTotal(rec))}</b></div>
    <div class="sec"><h4 style="margin-bottom:8px">توزيع الأكونت ده لو الشهر اتقفل كامل</h4><div id="recPrev">${recPreview(rec)}</div></div>
-   <div class="row between"><button class="btn primary" data-act="saveRec">حفظ</button><div class="row">${S.edit.id?`<button class="btn danger" data-act="delAsk" data-what="rec">شيل الأكونت من الشهر</button>`:''}<button class="btn" data-act="archClientR">${c.active===false?'رجّع العميل':'وقّف التعامل'}</button><button class="btn danger" data-act="delAsk" data-what="clientR">مسح العميل</button></div></div><div id="delZone"></div>
+   <div class="row between"><button class="btn primary" data-act="saveRec">حفظ</button><div class="row">${S.edit.id?`<button class="btn danger" data-act="delAsk" data-what="rec">🗑 مسح فاتورة الشهر ده</button>`:''}<button class="btn" data-act="archClientR">${c.active===false?'رجّع العميل':'وقّف التعامل (بآخر يوم)'}</button><button class="btn danger" data-act="delAsk" data-what="clientR">مسح العميل</button></div></div><div id="delZone"></div>
   </div>`);
 }
 const sv=id=>{const s=v(id);return s==='__new'?(v(id+'_x')?'ext:'+v(id+'_x'):''):s};
@@ -2309,8 +2320,8 @@ const salesSel=(id,val,role)=>{const exts=[...new Set([...S.recs.flatMap(r=>[r.m
   const o=(vv,lbl)=>`<option value="${h(vv)}" ${val===vv?'selected':''}>${h(lbl)}</option>`;
   return `<select id="${id}" data-sales="1"><option value="">—</option><optgroup label="من الفريق">${(role?[...S.emps.filter(e=>has(e,role)),...S.emps.filter(e=>!has(e,role))]:S.emps).map(e=>o(e.id,e.name)).join('')}</optgroup>${exts.length?`<optgroup label="من برا">${exts.map(x=>o('ext:'+x,x)).join('')}</optgroup>`:''}${cl.length?`<optgroup label="عميل">${cl.map(c=>o('ext:'+c.name,c.name)).join('')}</optgroup>`:''}<option value="__new">+ اسم تاني…</option></select><input id="${id}_x" placeholder="اسم السيلز" hidden style="margin-top:6px">`};
 function readRec(){
-  const{rec}=S.edit,m=rec.mgmt,ph=rec.photo,F=S.F,q=id=>document.getElementById(id);if(q('rc_name')){S.edit.cName=v('rc_name');S.edit.cPhone=v('rc_phone');if(q('rc_emails'))S.edit.cEmails=parseEmails(q('rc_emails').value)}
-  if(q('m_price')){m.price=n('m_price');m.desc=v('m_desc');{const mn={};[['posts','mn_p'],['stories','mn_s'],['designs','mn_d']].forEach(([k,id])=>{const x=v(id);if(x!=='')mn[k]=+x});m.min=mn}m.team={...(m.team||{})};{const x=sv('mt_sales');if(x)m.team.sales=x;else delete m.team.sales}
+  const{rec}=S.edit,m=rec.mgmt,ph=rec.photo,F=S.F,q=id=>document.getElementById(id);if(q('rc_name')){S.edit.cName=v('rc_name');S.edit.cPhone=v('rc_phone');if(q('rc_start')){S.edit.cStart=v('rc_start');S.edit.cEnd=v('rc_end')}if(q('rc_emails'))S.edit.cEmails=parseEmails(q('rc_emails').value)}
+  if(q('m_price')){m.price=n('m_price');if(q('m_days')){const dd=n('m_days'),fu=n('m_full');m.days=dd;if(fu){const pr=Math.round(fu*Math.min(dd,dimOf(S.month))/dimOf(S.month));if(m.full!==fu||m.dpr!==pr){m.price=pr;m.dpr=pr}m.full=fu}else delete m.full}m.desc=v('m_desc');{const mn={};[['posts','mn_p'],['stories','mn_s'],['designs','mn_d']].forEach(([k,id])=>{const x=v(id);if(x!=='')mn[k]=+x});m.min=mn}m.team={...(m.team||{})};{const x=sv('mt_sales');if(x)m.team.sales=x;else delete m.team.sales}
     m.pct={};Object.keys(MG).forEach(k=>{const x=q('mpc_'+k);if(x&&+x.value!==+F.mgmtPct[k])m.pct[k]=+x.value||0})}
   if(q('p_price')){ph.price=n('p_price');ph.desc=v('p_desc');ph.sessions=ph.sessions.map((_,i)=>({e:v('ses_'+i),d:v('sesd_'+i)}));ph.pv=2;ph.edits=ph.edits.map((_,i)=>({e:v('ed_e_'+i),v:n('ed_v_'+i)}));ph.sales=sv('p_sales');
     ph.pct={};Object.keys(PH).forEach(k=>{const x=q('ppc_'+k);if(x&&+x.value!==+F.photoPct[k])ph.pct[k]=+x.value||0})}
@@ -2564,9 +2575,10 @@ document.addEventListener('click',async e=>{
     rec.photo.sessions=rec.photo.sessions.map(sesNorm).filter(x=>x.e||x.d);rec.photo.edits=rec.photo.edits.filter(x=>x.e);
     const id=S.month+'_'+clientId,body={...rec,month:S.month,clientId,clientName:c.name,no:rec.no||`${S.month.slice(2).replace('-','')}-${String(c.code||1).padStart(3,'0')}`,status:rec.status||'unpaid'};delete body.id;
     body.clientName=nm;const mn=rec.mgmt?.on?rec.mgmt.min||{}:{},q={posts:+(mn.posts??S.F.minPosts??15),stories:+(mn.stories??S.F.minStories??10),designs:+(mn.designs??S.F.designTarget??8)};
-    if(await save(()=>{const bt=db.batch();bt.set(db.doc('fin/main').collection('invoices').doc(id),body);if(nm!==c.name||(S.edit.cPhone??c.phone)!==c.phone)bt.update(db.doc('clients/'+clientId),{name:nm,phone:S.edit.cPhone??c.phone??''});if(chE)bt.update(db.doc('clients/'+clientId),{emails:newE});if(rec.mgmt?.on)bt.set(db.doc('briefs/'+clientId),{cid:clientId,q,qMonth:S.month},{merge:true});return bt.commit().then(()=>chE||(nm!==c.name&&newE.length)?syncClientAccess(clientId,newE,oldE,nm):0)},'اتحفظ'))closeSheet();return}
+    const sd=S.edit.cStart??cStart(c),ed=S.edit.cEnd??cEnd(c),chD=sd!==cStart(c)||ed!==cEnd(c);
+    if(await save(()=>{const bt=db.batch();bt.set(db.doc('fin/main').collection('invoices').doc(id),body);if(chD)bt.update(db.doc('clients/'+clientId),{startDate:sd||'',endDate:ed||'',...(ed?{active:true}:{})});if(nm!==c.name||(S.edit.cPhone??c.phone)!==c.phone)bt.update(db.doc('clients/'+clientId),{name:nm,phone:S.edit.cPhone??c.phone??''});if(chE)bt.update(db.doc('clients/'+clientId),{emails:newE});if(rec.mgmt?.on)bt.set(db.doc('briefs/'+clientId),{cid:clientId,q,qMonth:S.month},{merge:true});return bt.commit().then(()=>chE||(nm!==c.name&&newE.length)?syncClientAccess(clientId,newE,oldE,nm):0)},'اتحفظ'))closeSheet();return}
   if(a==='startMonth'){b.disabled=true;const pm=prevMonth(S.month);const snap=await db.doc('fin/main').collection('invoices').where('month','==',pm).get();let k=0;
-    for(const d of snap.docs){const p=d.data();if(S.recs.some(r=>r.clientId===p.clientId))continue;const c=cli(p.clientId);if(!c||c.active===false)continue;
+    for(const d of snap.docs){const p=d.data();if(S.recs.some(r=>r.clientId===p.clientId))continue;const c=cli(p.clientId);if(!c||!cLiveIn({...c,active:c.gone?true:c.active},S.month))continue;
       const body={month:S.month,clientId:p.clientId,clientName:c.name,no:`${S.month.slice(2).replace('-','')}-${String(c.code||1).padStart(3,'0')}`,status:'unpaid',discount:0,adds:[],subs:[],
         mgmt:{...p.mgmt},photo:{on:false,price:p.photo?.price||0,desc:p.photo?.desc||'',sessions:[],edits:[],talents:[],script:p.photo?.script||'',sales:p.photo?.sales||'',pct:p.photo?.pct||{}}};if(p.demo)body.demo=true;
       if(await save(()=>db.doc('fin/main').collection('invoices').doc(S.month+'_'+p.clientId).set(body)))k++}
@@ -2574,7 +2586,7 @@ document.addEventListener('click',async e=>{
   if(a==='saveClient'){const name=v('c_name');if(!name)return toast('اكتب اسم العميل');const phone=v('c_phone'),id=S.edit.id||uid(),isNew=!S.edit.id,old=isNew?[]:cEmails(cli(id));
     const emails=parseEmails(document.getElementById('c_emails')?.value);
     const emp1=emails.find(e=>S.emps.some(x=>cleanEmail(x.email||'')===e));if(emp1)return toast(`${emp1} إيميل موظف، مينفعش يبقى إيميل عميل`);
-    if(await save(async()=>{await db.doc('clients/'+id).set(isNew?{name,phone,emails,active:true,code:Math.max(0,...S.clients.map(c=>c.code||0))+1}:{name,phone,emails},{merge:true});if(emails.length||old.length)await syncClientAccess(id,emails,old,name)},'اتحفظ'))closeSheet();return}
+    if(await save(async()=>{const sd=v('c_start'),ed=v('c_end');await db.doc('clients/'+id).set(isNew?{name,phone,emails,active:true,startDate:sd,endDate:ed,code:Math.max(0,...S.clients.map(c=>c.code||0))+1}:{name,phone,emails,startDate:sd,endDate:ed,...(ed?{active:true}:{})},{merge:true});if(emails.length||old.length)await syncClientAccess(id,emails,old,name)},'اتحفظ'))closeSheet();return}
   if(a==='login'){const pr=new firebase.auth.GoogleAuthProvider();pr.setCustomParameters({prompt:'select_account'});try{await auth.signInWithPopup(pr)}catch(e){if(e.code!=='auth/popup-closed-by-user'&&e.code!=='auth/cancelled-popup-request')loginErr(e)}return}
   if(a==='signout'){await auth.signOut();location.reload();return}
   if(a==='punch'&&isFri(today()))return toast('الجمعة إجازة، مفيش بصمة');
@@ -2908,8 +2920,8 @@ if(dl.w1<=dl.w0)return toast('نهاية الشغل لازم تكون بعد ب�
     const ex=S.emps.find(e=>(e.name||'').trim()===name);if(ex&&has(ex,role)&&!cleanEmail(v('qa_email')))return toast(`${name} موجود كـ${ROLES[role]} بالفعل`);
     const em=cleanEmail(v('qa_email'));const ok=ex?await save(()=>db.doc('employees/'+ex.id).update({roles:[...new Set([...rolesOf(ex),role])],role:rolesOf(ex)[0],...(em?{email:em}:{})}),em&&rolesOf(ex).includes(role)?`اتحفظ إيميل ${name}`:`اتضاف ${ROLES[role]} لـ ${name}`):await save(()=>db.collection('employees').doc(uid()).set({name,roles:[role],role,phone:'',email:cleanEmail(v('qa_email'))}),`${name} اتضاف`);
     if(ok){S.qa={};document.getElementById('qa_email').value='';const q=document.getElementById('qa_name');q.value='';q.focus()}return}
-  if(a==='archClientR'){const c=cli(S.edit.clientId);if(await save(()=>db.doc('clients/'+c.id).update({active:c.active===false}),c.active===false?'العميل رجع':'اتوقف التعامل'))closeSheet();return}
-  if(a==='archClient'){const c=cli(S.edit.id);if(await save(()=>db.doc('clients/'+c.id).update({active:c.active===false}),'اتعدّل'))closeSheet();return}
+  if(a==='archClientR'){const c=cli(S.edit.clientId);if(c.active===false){if(await save(()=>db.doc('clients/'+c.id).update({active:true,endDate:''}),'العميل رجع'))closeSheet();return}const ed=v('rc_end')||today();if(await save(()=>db.doc('clients/'+c.id).update({endDate:ed,active:true}),'اتسجّل آخر يوم '+dLong(ed)+' · بيختفي من الشهور اللي بعده'))closeSheet();return}
+  if(a==='archClient'){const c=cli(S.edit.id);if(c.active===false){if(await save(()=>db.doc('clients/'+c.id).update({active:true,endDate:''}),'العميل رجع'))closeSheet();return}const ed=v('c_end')||today();if(await save(()=>db.doc('clients/'+c.id).update({endDate:ed,active:true}),'اتسجّل آخر يوم '+dLong(ed)))closeSheet();return}
   if(a==='saveEmp'){const name=v('e_name');if(!name)return toast('اكتب الاسم');const roles=[...document.querySelectorAll('[data-role]:checked')].map(x=>x.dataset.role);if(!roles.length)return toast('اختار بوزيشن واحد على الأقل');const d={name,roles,role:roles[0],phone:v('e_phone'),vf:v('e_vf'),ip:v('e_ip'),email:cleanEmail(v('e_email'))},id=S.edit.id;
     if(await save(()=>id?db.doc('employees/'+id).update(d):db.collection('employees').doc(uid()).set(d),'اتحفظ'))closeSheet();return}
   if(a==='setPaid'&&b.dataset.v==='paid'){const X=allRecs().find(x=>x.id===b.dataset.id)||S.recs.find(x=>x.id===b.dataset.id);if(X)cinvPaidSync(X)}
