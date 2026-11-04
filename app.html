@@ -612,7 +612,7 @@ function render(){
   if(a&&main.contains(a)&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)&&!qa)return;
   if(S.edit&&S.edit.kind==='view')sheetView(S.edit.id,true);
   {const hd=document.querySelector('header');if(hd)document.documentElement.style.setProperty('--navH',hd.offsetHeight+'px')}
-  if(S.tab==='today')S.tab=S.mode==='app'&&(S.fin||S.tl)?'att':'me';main.innerHTML=({biz:vClient,brief:vBriefs,sum:vSum,today:vToday,reqs:vReqs,home:vHome,acc:vAcc,dist:vDist,team:vTeam,att:vAtt,tasks:vTasks,pay:vPay,star:vStar,site:vSite,free:vFree,rate:vRate,set:vSet,me:vCheckin,chat:vChat}[S.tab]||vCheckin)();
+  if(S.tab==='today')S.tab=S.mode==='app'&&(S.fin||S.tl)?'att':'me';main.innerHTML=S.va&&S.tab==='me'?vViewAs():(({biz:vClient,brief:vBriefs,sum:vSum,today:vToday,reqs:vReqs,home:vHome,acc:vAcc,dist:vDist,team:vTeam,att:vAtt,tasks:vTasks,pay:vPay,star:vStar,site:vSite,free:vFree,rate:vRate,set:vSet,me:vCheckin,chat:vChat}[S.tab]||vCheckin)());
   for(const[id,val]of Object.entries(S.fd||{})){const el=document.getElementById(id);if(el&&main.contains(el)&&el.type!=='file'&&el.value!==val)el.value=val}
   if(S.tab==='chat')paintChat(true);
   if(qa)document.getElementById('qa_name')?.focus();
@@ -650,7 +650,7 @@ function accPage(cid,name){ensureBriefs();const lead=isLead(),roles=accRoleOf(ci
    ${P.length?`<div class="small">بوستات الشهر: <b>${P.length}</b> · اتعتمد ${dn} · اتنشر ${pub}</div>`:''}
    ${team.length?`<div><div class="label">التيم على الأكونت</div><div class="small">${team.map(([e,r])=>`${h(emp(e).name)} <span class="muted">(${r})</span>`).join(' · ')}</div></div>`:''}</div>`)}
 function accsBox(){if(!isLead())return '';const L=(S.clients||[]).filter(c=>c.active!==false&&!c.demo);if(!L.length)return '';
-  return `<div class="panel"><h3>الأكونتات</h3><div class="chips" style="margin-top:6px">${L.map(c=>`<button class="chip" data-act="accPage" data-c="${c.id}" data-n="${h(c.name)}">${h(c.name)}</button>`).join('')}</div></div>`}
+  return `<div class="panel"><div class="row between"><h3>الأكونتات</h3>${S.fin?`<button class="btn xs" data-act="stOpen">📊 إحصائيات التيم</button>`:''}</div><div class="chips" style="margin-top:6px">${L.map(c=>`<button class="chip" data-act="accPage" data-c="${c.id}" data-n="${h(c.name)}">${h(c.name)}</button>`).join('')}</div></div>`}
 // شات لكل أكونت: التيم المتوزع عليه + الإدارة والتيم ليدر + المصورين والمونتيرز والميديا باير
 function syncAccChats(){if(!S.fin||!S.clients?.length||!S.emps.length||!S.asg)return;const tl=(S.tlEmails||[]).map(cleanEmail),own=OWNER_EMAILS.map(x=>x.toLowerCase()),gen=S.emps.filter(e=>['photographer','editor','mediabuyer'].some(r=>has(e,r))).map(e=>cleanEmail(e.email||'')).filter(Boolean);
   for(const c of S.clients){if(c.active===false||c.demo)continue;const A=S.asg?.[c.id];if(!A)continue;
@@ -1476,7 +1476,7 @@ async function rebuildMine(){
 }
 /* ---------- المهام ---------- */
 /* ---------- مهام اليوم: كل التيم في جدول واحد + إشعار للتيم ---------- */
-function notifyBox(){if(!S.fin)return '';const list=S.emps.filter(e=>!isOwnerEmp(e));return `<div class="panel stack" style="gap:8px"><h3>📣 إشعار</h3>
+function notifyBox(){if(!S.fin)return '';if(S.va)return '';const list=S.emps.filter(e=>!isOwnerEmp(e));return `<div class="panel stack" style="gap:8px"><h3>📣 إشعار</h3>
    <div class="field"><label class="label" for="nt_to">لمين</label><select id="nt_to"><optgroup label="التيم"><option value="team">التيم كله</option>${list.filter(e=>e.email).map(e=>`<option value="${h(cleanEmail(e.email))}">${h(e.name)}</option>`).join('')}</optgroup>${(()=>{const C=(S.clients||[]).filter(c=>c.active!==false&&cEmails(c).length);return C.length?`<optgroup label="العملاء على «بيزنسي»"><option value="c:all">كل العملاء (${C.length})</option>${C.map(c=>`<option value="c:${c.id}">${h(c.name)}</option>`).join('')}</optgroup>`:''})()}</select></div>
    <textarea id="nt_t" rows="2" placeholder="الرسالة، مثلاً: ميتنج الساعة 3 / متنسوش تقفلوا مهام النهارده"></textarea>
    <div><button class="btn primary" data-act="sendNotif">ابعت</button></div>
@@ -1958,6 +1958,33 @@ function vAcc(){syncTotals();
      ${r?`<span class="amt">${egp(grandTotal(r))}</span>`:''}${st}
      <div class="row"><button class="btn sm" data-act="editRec" data-c="${c.id}">${r?'تعديل':'سجّل الشهر'}</button>${r&&recTotal(r)?`<button class="btn sm primary" data-act="viewInv" data-id="${r.id}">الفاتورة</button>`:''}</div></div>`}).join('')}</div></div></div>`;
 }
+/* ---------- إحصائيات التيم ---------- */
+function teamStatsData(){const m=S.month,AM=attModel(),L=(S.reqs||[]).filter(r=>r.status!=='rejected');
+  return S.emps.filter(e=>!isOwnerEmp(e)&&e.id!==ownerEmpId()).map(e=>{const id=e.id,att=AM.pres[id]?.size||0,ab=(AM.abs[id]||[]).filter(a=>a.s==='absent').length,lv=(AM.abs[id]||[]).filter(a=>a.s==='leave').length;
+    const late=Object.entries(S.checks?.[id]||{}).filter(([d,x])=>d.startsWith(m)&&['soft','hard'].includes(lateKind(x.in))).length;
+    const done=L.filter(r=>r.to===id&&r.status==='done'&&(r.doneDay||r.due||'').startsWith(m)),withDl=done.filter(r=>r.dl&&r.dlvAt),onT=withDl.filter(r=>r.dlvAt<=r.dl).length;
+    const open=L.filter(r=>r.to===id&&OPEN_ST.includes(r.status)),lateNow=open.filter(r=>lateH(r)).length,byDay={};done.forEach(r=>{const d=r.doneDay||r.due;(byDay[d]??=[]).push(r)});
+    return{e,att,ab,lv,late,done:done.length,per:att?Math.round(done.length/att*10)/10:0,onT:withDl.length?Math.round(onT/withDl.length*100):null,open:open.length,lateNow,byDay}}).sort((a,b)=>b.done-a.done)}
+function teamStatsBox(){if(!S.fin)return '';const R=teamStatsData();if(!R.length)return '';const td=today(),m=S.month;
+  const top=R[0],bestAtt=[...R].sort((a,b)=>b.att-a.att||a.ab-b.ab)[0],onT=R.filter(r=>r.onT!=null).sort((a,b)=>b.onT-a.onT)[0];
+  const accs=(S.clients||[]).filter(c=>c.active!==false&&!c.demo&&S.asg?.[c.id]).map(c=>{const P=S.plans?.[planId(m,c.id)],items=Object.entries(P?.items||{}),plan=items.reduce((a,[,L])=>a+L.length,0),due=items.filter(([d])=>d<=td).reduce((a,[,L])=>a+L.length,0),Q=(S.reqs||[]).filter(r=>r.type==='pl'&&r.cid===c.id&&r.month===m&&r.status!=='rejected');return{c,plan,due,ok:Q.filter(r=>r.status==='done').length,pub:Q.filter(r=>r.pubAt).length}});
+  const th='style="padding:6px 8px;text-align:center;white-space:nowrap"';
+  return `<div class="panel stack" style="gap:10px"><h3>📊 إحصائيات التيم · ${mName(m)}</h3>
+   <div class="tiles">${top?.done?`<div class="tile"><div class="label">أكتر حد خلّص مهام</div><b>${h(top.e.name)}</b><div class="small muted">${top.done} مهمة</div></div>`:''}${bestAtt?.att?`<div class="tile"><div class="label">أحسن حضور</div><b>${h(bestAtt.e.name)}</b><div class="small muted">${bestAtt.att} يوم</div></div>`:''}${onT?`<div class="tile"><div class="label">أكتر حد في الميعاد</div><b>${h(onT.e.name)}</b><div class="small muted">${onT.onT}%</div></div>`:''}</div>
+   <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr><th style="padding:6px 8px;text-align:right">الاسم</th><th ${th}>حضر</th><th ${th}>غاب</th><th ${th}>اتأخر</th><th ${th}>مهام خلصت</th><th ${th}>في اليوم</th><th ${th}>في الميعاد</th><th ${th}>متأخر دلوقتي</th><th></th></tr></thead><tbody>
+   ${R.map(r=>`<tr style="border-top:1px solid var(--line)"><td style="padding:6px 8px;white-space:nowrap"><button class="linkbtn" data-act="stDet" data-id="${r.e.id}"><b>${h(r.e.name)}</b></button><div class="small muted">${h(rolesTxt(r.e))}</div></td><td ${th} class="num">${r.att}</td><td ${th} class="num">${r.ab}${r.lv?` <span class="muted">+${r.lv} إجازة</span>`:''}</td><td ${th} class="num">${r.late}</td><td ${th} class="num"><b>${r.done}</b></td><td ${th} class="num">${r.per}</td><td ${th} class="num">${r.onT==null?'—':r.onT+'%'}</td><td ${th} class="num" style="${r.lateNow?'color:var(--bad)':''}">${r.lateNow}</td><td ${th}><button class="btn xs" data-act="viewAs" data-id="${r.e.id}">👁 صفحته</button></td></tr>`).join('')}</tbody></table></div>
+   ${accs.length?`<div><div class="label" style="margin-bottom:4px">البوستات في كل أكونت</div><div class="stack" style="gap:4px">${accs.map(x=>`<div class="row between small" style="gap:8px"><button class="linkbtn" data-act="accPage" data-c="${x.c.id}" data-n="${h(x.c.name)}"><b>${h(x.c.name)}</b></button><span class="num">في الخطة ${x.plan} · المفروض لحد النهارده ${x.due} · اتعتمد ${x.ok} · <b style="color:${x.pub>=x.due?'var(--good)':'var(--bad)'}">اتنشر ${x.pub}</b></span></div>`).join('')}</div></div>`:''}</div>`}
+function sheetStDet(id){const r=teamStatsData().find(x=>x.e.id===id);if(!r)return;const m=S.month,C=S.checks?.[id]||{},days=[...new Set([...Object.keys(C).filter(d=>d.startsWith(m)),...Object.keys(r.byDay)])].sort().reverse();
+  openSheet(`<div class="sheet-h"><div><h3>${h(r.e.name)}</h3><div class="small muted">${mName(m)} · حضر ${r.att} · غاب ${r.ab} · خلّص ${r.done} مهمة</div></div><button class="x" data-act="close" aria-label="قفل">×</button></div><div class="stack">
+   <button class="btn sm" data-act="viewAs" data-id="${id}" style="justify-content:center">👁 شوف صفحته زي ما هو شايفها</button>
+   ${days.length?days.map(d=>{const x=C[d]||{},L=r.byDay[d]||[];return `<div class="en-row"><div class="row between"><b class="small">${dLong(d)}</b><span class="small num">${x.in?'حضور '+x.in:'—'}${x.out?' · انصراف '+x.out:''} ${x.in?latePill(x.in):''}</span></div>${L.length?`<div class="small">✅ ${L.length} مهمة: ${L.map(q=>h(q.title||RQ_T[q.type]?.n||'')).join('، ')}</div>`:'<div class="small muted">مفيش مهام خلصت</div>'}</div>`}).join(''):'<p class="small muted">مفيش بيانات الشهر ده.</p>'}</div>`)}
+// معاينة صفحة الموظف: نفس «صفحتي» بتاعته، للعرض بس
+async function viewAs(id){const e=emp(id);if(!e||!S.fin)return;closeSheet();toast('بيحمّل صفحته…');let mine=null,task=null;try{const[a,b]=await Promise.all([db.doc('mine/'+id).get(),db.doc('tasks/'+id+'_'+today()).get()]);mine=a.exists?a.data():null;task=b.exists?b.data():null}catch(x){console.warn(x)}
+  S.va={id,e,mine,task};S.tab='me';render();window.scrollTo(0,0)}
+function vViewAs(){const V=S.va,keep={me:S.me,myMine:S.myMine,myTask:S.myTask,myLog:S.myLog,fin:S.fin,tl:S.tl,myPlans:S.myPlans,myReps:S.myReps,myAsks:S.myAsks,myIdeas:S.myIdeas,myTaskLoaded:S.myTaskLoaded};let html='';
+  try{S.me=V.e;S.myMine=V.mine;S.myTask=V.task;S.myTaskLoaded=today();S.myLog=S.checks?.[V.id]||{};S.fin=false;S.tl=(S.tlEmails||[]).map(cleanEmail).includes(cleanEmail(V.e.email||''))||has(V.e,'teamleader');S.myPlans=S.plans||{};S.myReps=S.reps||{};S.myAsks=[];S.myIdeas=[];html=vCheckin()}
+  catch(x){console.warn(x);html='<div class="panel">ماقدرتش أعرض صفحته.</div>'}finally{Object.assign(S,keep)}
+  return `<div class="notice row between" style="position:sticky;top:var(--navH,0);z-index:5;max-width:520px;margin:0 auto 10px"><span>👁 بتشوف صفحة <b>${h(V.e.name)}</b> زي ما هو شايفها (للعرض بس)</span><button class="btn sm" data-act="vaExit">خروج</button></div>`+html}
 function vTeam(){
   const C=compute();
   const Q=S.qa||{};
@@ -1968,8 +1995,8 @@ function vTeam(){
     <button class="btn primary" data-act="quickAdd" style="justify-content:center">إضافة</button></div>
     <p class="small muted" style="margin:0">البوزيشن بيحدد طريقة حساب المرتب. لو الاسم موجود قبل كده، البوزيشن الجديد بيتضاف له. بعد الإضافة الخانة بتفضى علشان تكتب اللي بعده على طول.</p></div>`;
   if(!S.emps.length)return `<div class="stack"><h2>الفريق</h2><div class="panel row between"><span>ضيف الفريق اللي سجّلناه قبل كده (11 موظف) بضغطة واحدة، وبعدين ضيف إيميل كل واحد.</span><button class="btn dark" data-act="seedTeam">ضيف الفريق</button></div>${qa}</div>`;
-  return `<div class="stack">${demoBanner()}<h2>الفريق · ${S.emps.length}</h2>${qa}
-  <div class="panel"><div class="list">${[...S.emps].sort((a,b)=>firstIdx(a)-firstIdx(b)).map(e=>`<div class="item"><div class="grow"><b>${h(e.name)}</b>${e.demo?'<span class="demo">مثال</span>':''}<div class="small muted">${h(rolesTxt(e))}</div></div>${e.email?`<span class="pill paid" dir="ltr">${h(e.email)}</span>`:'<span class="pill none">من غير إيميل · مش هيقدر يبصم</span>'}<span class="amt">${egp(C.P[e.id]?.total||0)}</span><button class="btn sm" data-act="editEmp" data-id="${e.id}">تعديل</button></div>`).join('')}</div></div></div>`;
+  return `<div class="stack">${demoBanner()}<h2>الفريق · ${S.emps.length}</h2>${teamStatsBox()}${qa}
+  <div class="panel"><div class="list">${[...S.emps].sort((a,b)=>firstIdx(a)-firstIdx(b)).map(e=>`<div class="item"><div class="grow"><b>${h(e.name)}</b>${e.demo?'<span class="demo">مثال</span>':''}<div class="small muted">${h(rolesTxt(e))}</div></div>${e.email?`<span class="pill paid" dir="ltr">${h(e.email)}</span>`:'<span class="pill none">من غير إيميل · مش هيقدر يبصم</span>'}<span class="amt">${egp(C.P[e.id]?.total||0)}</span><button class="btn sm" data-act="editEmp" data-id="${e.id}">تعديل</button>${e.email&&!isOwnerEmp(e)?`<button class="btn sm" data-act="viewAs" data-id="${e.id}">👁</button>`:''}</div>`).join('')}</div></div></div>`;
 }
 const EN={
   posts:{title:'الكريتور',hint:'قدام كل كريتور الأكونتات المتوزعة عليه. اختار المطلوب من كل أكونت: ريالتي، ديزاين، كيرزل ديزاين، ريل، ستوري. لو خطة الأكونت معتمدة، المهام بتتعلّم لوحدها منها وانت تراجع وتدوس «إرسال المهام» في آخر كارت كل كريتور. لو حد غاب، اختار من «يستلمها» تحت مين يستلم مهامه قبل ما تدوس «إرسال المهام».',roles:['creator'],asg:'creator',cover:true,t:PS_T,add:'+ مهمة كريتور'},
@@ -2509,7 +2536,12 @@ document.addEventListener('click',async e=>{
   const b=e.target.closest('[data-act]');if(!b)return;const a=b.dataset.act;
   if(a==='shade'){if(e.target===b)closeSheet();return}
   if(a==='close')return closeSheet();
-  if(a==='tab'){if(S.unsubMsgs){S.unsubMsgs();S.unsubMsgs=null;S.chatId=null}S.tab=b.dataset.k;try{localStorage.setItem('tab',S.tab)}catch(_){}render();window.scrollTo(0,0);return}
+  if(a==='vaExit'){S.va=null;S.tab='team';render();window.scrollTo(0,0);return}
+  if(S.va&&S.tab==='me'&&!document.getElementById('sheetRoot')?.contains(b)&&!['tab','rqOpen','accPage','briefView','planOpen','plDay','attExp','goMine','mmOpen','rqOld','repView'].includes(a)){toast('ده عرض بس لصفحته');return}
+  if(a==='viewAs')return viewAs(b.dataset.id);
+  if(a==='stDet')return sheetStDet(b.dataset.id);
+  if(a==='stOpen'){openSheet(`<div class="sheet-h"><h3>إحصائيات التيم</h3><button class="x" data-act="close" aria-label="قفل">×</button></div>${teamStatsBox()}`);return}
+  if(a==='tab'){S.va=null;if(S.unsubMsgs){S.unsubMsgs();S.unsubMsgs=null;S.chatId=null}S.tab=b.dataset.k;try{localStorage.setItem('tab',S.tab)}catch(_){}render();window.scrollTo(0,0);return}
   if(a==='mPrev'||a==='mNext'){let[y,m]=S.month.split('-').map(Number);m+=a==='mNext'?1:-1;if(m<1){m=12;y--}if(m>12){m=1;y++}S.month=y+'-'+String(m).padStart(2,'0');S.attDate=S.month===today().slice(0,7)?today():S.month+'-01';S.attDraft=null;subMonth();render();return}
   if(a==='editClient')return sheetClient(b.dataset.id);
   if(a==='editEmp')return sheetEmp(b.dataset.id);
