@@ -633,6 +633,19 @@ function vPunches(d){
 /* ---------- فيه حاجة واقفة معاك؟ ---------- */
 const openAsks=()=>(S.asksAll||[]).flatMap(d=>(d.list||[]).filter(x=>!x.done).map(x=>({...x,emp:d.id,name:d.name||emp(d.id)?.name||''}))).sort((a,b)=>b.at-a.at);
 const atTxt=ms=>{const z=new Date(ms);return (z.toDateString()===new Date().toDateString()?'النهارده':dLong(z.getFullYear()+'-'+String(z.getMonth()+1).padStart(2,'0')+'-'+String(z.getDate()).padStart(2,'0')))+' '+hm(z)};
+/* ---------- «حاجة مهمة للتيم»: رسالة من المدير/التيم ليدر بتظهر في أول صفحتي لحد ما يدوسوا تمام ---------- */
+function tnSub(){if(S.unsubTN||!S.email)return;S.unsubTN=1;db.collection('tnotes').where('active','==',true).onSnapshot(s=>{S.tn=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.ms||0)-(a.ms||0));rr()},err)}
+const tnFor=x=>x.to==='all'?true:(x.to||[]).includes(cleanEmail(S.email||''));
+function tnCards(){tnSub();const me=cleanEmail(S.email||''),L=(S.tn||[]).filter(x=>x.byEmail!==me&&tnFor(x)&&!(x.seen||[]).includes(me));if(!L.length)return '';
+  return L.map(x=>`<div class="panel stack" style="gap:8px;border:2px solid var(--accent);background:var(--accent-soft,#FDEDED)"><div class="row between"><b>📌 حاجة مهمة من ${h(x.byName||'الإدارة')}</b><span class="small muted">${x.ms?dlTxt(x.ms):''}</span></div><div style="white-space:pre-wrap">${linkify(x.t||'')}</div><div><button class="btn primary" data-act="tnOk" data-id="${x.id}">تمام ✓</button></div></div>`).join('')}
+function tnBox(){if(!(S.fin||S.tl))return '';tnSub();const E=S.tnE||{to:'all',sel:[]},P=(S.emps||[]).filter(e=>e.email&&cleanEmail(e.email)!==cleanEmail(S.email||'')&&!isOwnerEmp(e));const ppl=P.length?P:chatPeople().filter(p=>p.email&&p.email!==S.email);
+  const mine=(S.tn||[]).filter(x=>x.byEmail===cleanEmail(S.email||'')||S.fin);
+  return `<div class="panel stack" style="gap:8px"><h3>📌 حاجة مهمة للتيم</h3>
+   <textarea id="tn_t" rows="3" placeholder="اكتب الرسالة اللي عايزها تظهر للتيم في أول صفحتي"></textarea>
+   <div class="seg"><button class="${E.to==='all'?'on p':''}" data-act="tnTo" data-k="all">التيم كله</button><button class="${E.to==='sel'?'on p':''}" data-act="tnTo" data-k="sel">ناس معينين</button></div>
+   ${E.to==='sel'?`<div class="chips">${ppl.map(p=>{const em=cleanEmail(p.email);return `<button class="chip ${E.sel.includes(em)?'on':''}" data-act="tnPick" data-e="${h(em)}">${h(p.name)}</button>`}).join('')}</div>`:''}
+   <div><button class="btn primary" data-act="tnSend">ابعت للتيم</button></div>
+   ${mine.length?`<div class="stack" style="gap:6px">${mine.map(x=>{const tos=x.to==='all'?ppl.map(p=>cleanEmail(p.email)):(x.to||[]),seen=(x.seen||[]),nm=em=>ppl.find(p=>cleanEmail(p.email)===em)?.name||em.split('@')[0],left=tos.filter(em=>!seen.includes(em));return `<div class="en-row"><div class="row between" style="gap:8px"><span class="small muted">${x.to==='all'?'للتيم كله':'لـ '+h(tos.map(nm).join('، '))} · ${x.ms?dlTxt(x.ms):''}</span><button class="btn xs danger" data-act="tnDel" data-id="${x.id}">مسح</button></div><div style="white-space:pre-wrap">${linkify(x.t||'')}</div><div class="small"><span style="color:var(--good)">✓ تمام: ${seen.length?h(seen.map(nm).join('، ')):'لسه محدش'}</span>${left.length?`<br><span class="muted">لسه: ${h(left.map(nm).join('، '))}</span>`:''}</div></div>`}).join('')}</div>`:''}</div>`}
 function asksInbox(){const L=openAsks();
   return `<div class="panel" style="border-color:${L.length?'var(--accent)':'var(--line)'}"><div class="row between"><h3>🚩 حاجات واقفة مع التيم</h3>${L.length?`<span class="pill unpaid">${L.length}</span>`:''}</div>
    ${L.length?`<div class="list" style="margin-top:6px">${L.map(x=>`<div class="item" style="align-items:flex-start"><div class="grow" style="min-width:0"><b>${h(x.name)}</b> <span class="small muted">${atTxt(x.at)}</span><div style="white-space:pre-wrap;overflow-wrap:anywhere;margin-top:2px">${linkify(x.t)}</div></div><button class="btn sm" data-act="askDone" data-e="${x.emp}" data-id="${x.id}">تمام ✓</button></div>`).join('')}</div>`:'<p class="small muted" style="margin:6px 0 0">مفيش حاجة واقفة مع حد دلوقتي.</p>'}</div>`}
@@ -1409,7 +1422,7 @@ function outGate(e){const hr=has(e,'moderator')?23:20,now=new Date(),L=gateLeft(
 function vCheckin(){
   if(!S.empsLoaded)return `<div class="empty"><h3>بيحمّل…</h3></div>`;
   const e=S.me;
-  if(!e&&(S.fin||S.tl))return `<div class="stack" style="max-width:520px;margin:0 auto">${bellBar()}${asksInbox()}${notifBanner()}${reqsPanel()}${ideasInbox()}${leadReqsPanel()}${clientInbox()}${bizTeamBox()}${notifyBox()}${teamAccsBox()}${drivesBox(null)}<div class="panel"><h3>أدوات الـ AI</h3>${icoRow(AIT)}</div></div>`;
+  if(!e&&(S.fin||S.tl))return `<div class="stack" style="max-width:520px;margin:0 auto">${tnCards()}${bellBar()}${asksInbox()}${tnBox()}${notifBanner()}${reqsPanel()}${ideasInbox()}${leadReqsPanel()}${clientInbox()}${bizTeamBox()}${notifyBox()}${teamAccsBox()}${drivesBox(null)}<div class="panel"><h3>أدوات الـ AI</h3>${icoRow(AIT)}</div></div>`;
   if(!e)return `<div class="panel empty" style="max-width:460px;margin:0 auto"><h3>إيميلك مش متسجّل عندنا</h3><p>انت داخل بـ <b dir="ltr">${h(S.email)}</b>. ابعت الإيميل ده للإدارة علشان يضيفوه لاسمك، وبعدين افتح اللينك تاني.</p></div>`;
   const d=today(),p=(S.myLog||{})[d]||{},m=d.slice(0,7);
   const days=Object.entries(S.myLog||{}).filter(([k])=>k.startsWith(m)).sort((a,b)=>b[0].localeCompare(a[0]));
@@ -1423,7 +1436,7 @@ function vCheckin(){
   const acc=(S.myMine?.byMonth||{})[m]||[];ensureBriefs();
   const lates=days.filter(([,x])=>lateKind(x.in)==='hard').length,soft=days.filter(([,x])=>lateKind(x.in)==='soft').length;
   return `<div class="stack" style="max-width:520px;margin:0 auto">
-   ${bellBar()}${S.fin||S.tl?asksInbox():''}
+   ${tnCards()}${bellBar()}${S.fin||S.tl?asksInbox()+tnBox():''}
    <div class="panel stack" style="text-align:center;position:relative"><div class="muted">أهلاً ${h(e.name)}</div>
     <div class="num" id="clk" style="font-family:var(--display);font-size:48px;font-weight:700;color:var(--ink-strong);line-height:1.1">${hm(new Date())}</div>
     <div class="muted">${dLong(d)} · البصمة من ${OPEN()} · الحضور لحد ${START()} والسماحية لحد ${GRACE()}</div>
@@ -2563,6 +2576,12 @@ document.addEventListener('click',async e=>{
   if(a==='close')return closeSheet();
   if(a==='vaExit'){S.va=null;S.tab='team';render();window.scrollTo(0,0);return}
   if(S.va&&S.tab==='me'&&!document.getElementById('sheetRoot')?.contains(b)&&!['tab','rqOpen','accPage','briefView','planOpen','plDay','attExp','goMine','mmOpen','rqOld','repView'].includes(a)){toast('ده عرض بس لصفحته');return}
+  if(a==='tnTo'){const t=document.getElementById('tn_t')?.value||'';S.tnE={...(S.tnE||{sel:[]}),to:b.dataset.k};render();const x=document.getElementById('tn_t');if(x)x.value=t;return}
+  if(a==='tnPick'){const t=document.getElementById('tn_t')?.value||'',E=S.tnE||{to:'sel',sel:[]},em=b.dataset.e;E.sel=E.sel.includes(em)?E.sel.filter(x=>x!==em):[...E.sel,em];S.tnE=E;render();const x=document.getElementById('tn_t');if(x)x.value=t;return}
+  if(a==='tnSend'){const t=v('tn_t'),E=S.tnE||{to:'all',sel:[]};if(!t)return toast('اكتب الرسالة');if(E.to==='sel'&&!E.sel.length)return toast('اختار مين يوصله');b.disabled=true;const nm=S.me?.name||(S.fin?'الإدارة':'التيم ليدر'),to=E.to==='all'?'all':E.sel;
+    if(await save(()=>db.collection('tnotes').add({t:t.slice(0,1500),to,byEmail:cleanEmail(S.email||''),byName:nm,ms:Date.now(),seen:[],active:true}),'اتبعتت للتيم ✓')){const x=document.getElementById('tn_t');if(x)x.value='';S.tnE={to:'all',sel:[]};notifyTo(to==='all'?'team':to,'📌 '+nm+': '+t.slice(0,200))}b.disabled=false;return}
+  if(a==='tnOk'){b.disabled=true;const em=cleanEmail(S.email||'');S.tn=(S.tn||[]).map(x=>x.id===b.dataset.id?{...x,seen:[...(x.seen||[]),em]}:x);render();await save(()=>db.doc('tnotes/'+b.dataset.id).update({seen:firebase.firestore.FieldValue.arrayUnion(em)}));return}
+  if(a==='tnDel'){b.disabled=true;await save(()=>db.doc('tnotes/'+b.dataset.id).delete(),'اتمسحت');return}
   if(a==='viewAs')return viewAs(b.dataset.id);
   if(a==='stTog'){setTimeout(()=>{S.stOpen=!!b.closest('details')?.open},0);return}
   if(a==='stDet')return sheetStDet(b.dataset.id);
