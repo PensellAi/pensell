@@ -496,8 +496,8 @@ function compute(){
       {const PL=S.plans?.[planId(S.month,r.clientId)],td=today(),last=S.month<td.slice(0,7)?monthEnd(S.month):S.month===td.slice(0,7)?new Date(Date.now()-864e5).toISOString().slice(0,10):'';
         if(PL?.items&&last)for(const[d,its]of Object.entries(PL.items).sort()){if(d>last||isFri(d)||!(its||[]).some(i=>i.t==='ستوري')||storyDone.has(r.clientId+'|'+d))continue;const dy=+d.slice(8),who=(segs.filter(x=>(+x.from||1)<=dy).pop()||segs[0])?.e;if(emp(who))add(who,-cs/30,{type:'story',what:`ستوري ${c} يوم ${dy} ماتعملتش (يوم من 30 من نسبة الأكونت)`})}}
       const ds=M*p.designer/100,dc={...(designs[r.clientId]||{})};for(const e of new Set([...dSegs(T.designer?{designer:T.designer}:null).map(x=>x.e),...Object.keys(dc)])){if(!emp(e))continue;reg(e,'dz|'+r.clientId,`ديزاين · ${c}`,dc[e]||0);const o=OV(e,'dz|'+r.clientId);if(o!=null)dc[e]=o}for(const e of Object.keys(dc))if(!(dc[e]>0))delete dc[e];const tot=Object.values(dc).reduce((a,b)=>a+b,0);
-      if(tot){const earned=tD>0?ds*Math.min(tot,tD)/tD:ds;for(const[e,k]of Object.entries(dc)){inc(out.designs,e,k);add(e,earned*k/tot,{type:'design',role:'designer',client:c,n:k,tot,share:ds,target:tD})}}
-      else if(emp(T.designer))add(T.designer,0,{type:'design',role:'designer',client:c,n:0,tot:0,share:ds,target:tD});
+      if(tot){const earned=tD>0?ds*Math.min(tot,tD)/tD:ds;for(const[e,k]of Object.entries(dc)){inc(out.designs,e,k);add(e,earned*k/tot,{type:'design',role:'designer',client:c,cid:r.clientId,n:k,tot,share:ds,target:tD})}}
+      else if(emp(T.designer))add(T.designer,0,{type:'design',role:'designer',client:c,cid:r.clientId,n:0,tot:0,share:ds,target:tD});
       {const ed=(DP.ed[r.clientId]||[]).filter(x=>(x.date||'').startsWith(S.month));for(const x of (m.xt||[]))if(x.e&&+x.pct&&emp(x.e)){const share=M*(+x.pct)/100,n=+x.n||0,done0=ed.filter(z=>z.e===x.e).reduce((a,z)=>a+(+z.v||1),0);reg(x.e,'ed|'+r.clientId,`فيديوهات · ${c}`,done0);const done=OV(x.e,'ed|'+r.clientId)??done0,earned=n?share*Math.min(done,n)/n:share;
         add(x.e,earned,{type:'xt',client:c,cid:r.clientId,n:done,target:n,share,pct:+x.pct})}}
       tlPool+=M*p.teamleader/100;
@@ -579,6 +579,7 @@ function compute(){
     for(const cid of req.filter(cid=>!planOnTime(S.plans?.[planId(S.month,cid)]))){const a=accShare(id,cid);if(a>0)add(id,-0.05*a,{type:'plan',acc:clName(cid)||'الأكونت',what:`خطة ${clName(cid)||'الأكونت'} ماتسلّمتش لحد يوم 7 (5% من نسبة الأكونت)`})}}
   // الخصومات متجمّعة: سطر لكل أكونت + سطر للغياب والتأخير، والمدير يقدر يعدّل المبلغ أو يلغيه
   const DG={};for(const[id,p]of Object.entries(P)){const G={};for(const l of p.lines){if(l.amt>=0||l.man||l.type==='sumadj')continue;const k=dedKey(l);if(!k)continue;(G[k]??={label:dedLabel(k),auto:0,items:[]});G[k].auto+=l.amt;G[k].items.push(l)}
+    for(const[k,g]of Object.entries(G)){const byT={};g.items.forEach(l=>(byT[l.type]??=[]).push(l));for(const[t,L]of Object.entries(byT)){const o=PA0.dedI?.[id]?.[k+'|'+t];if(!o)continue;const f=o.off?0:Math.max(0,+o.n||0)/L.length;for(const l of L){const nw=l.amt*f;p.raw+=nw-l.amt;l.orig=l.orig??l.amt;l.amt=nw}}}
     for(const[k,g]of Object.entries(G)){const o=PA0.ded?.[id]?.[k];g.ov=o||null;if(o&&g.auto<0){const T=o.off?0:-Math.abs(+o.a||0),f=T/g.auto;for(const l of g.items){const nw=l.amt*f;p.raw+=nw-l.amt;l.orig=l.amt;l.amt=nw}}g.cur=g.items.reduce((a,l)=>a+l.amt,0)}DG[id]=G}
   // تعديلات المدير على المرتب: مكافأة / خصم / إلغاء خصم، أو مرتب نهائي بيتكتب بإيده
   const PA=S.payAdj||{};for(const[id,L]of Object.entries(PA.adj||{}))if(emp(id))for(const x of L||[])if(+x.a)add(id,+x.a,{type:'sumadj',what:x.d||(+x.a>0?'مكافأة':'خصم'),man:1});
@@ -2210,8 +2211,8 @@ function vPay(){
   ${Object.keys(C.X).length?`<div class="panel"><h3>مستحقات ناس من برا الفريق (سيلز، بلوجر، موديل…)</h3><div class="tbl" style="margin-top:8px"><table><thead><tr><th>الاسم</th><th>البنود</th><th>العمولة</th></tr></thead><tbody>${Object.entries(C.X).map(([nm,x])=>`<tr><td>${h(nm)}</td><td class="small">${x.lines.map(l=>h(l.what)).join('<br>')}</td><td class="num"><b>${money(x.total)}</b></td></tr>`).join('')}</tbody></table></div></div>`:''}
   ${ids.length?ids.map(id=>{const e=emp(id),p=C.P[id];
    const covers={};p.lines.filter(l=>l.type==='cover').forEach(c=>{const k=c.date+c.from;(covers[k]??={...c,amt:0});covers[k].amt+=c.amt});
-   const G=groupLines(p.lines,C),grows=G.groups.map(x=>`<tr><td><b>${h(x.acc)}</b><div class="small muted">${x.parts.map(q=>`${money(q.amt)} ${h(q.label)}`).join(' · ')}</div></td><td class="num">${money(x.full)}</td><td class="num minus">${x.full-x.amt>0.5?'−'+money(x.full-x.amt):'—'}</td><td class="num">${money(x.amt)}</td></tr>`).join('');
-   const AL=G.rest.filter(l=>ATT_T.includes(l.type)),ag=C.DG?.[id]?.att,arow=AL.length?`<tr><td><details><summary><b>الغياب والتأخير</b> <span class="small muted">${[['absence','غياب/إجازة'],['late','تأخير'],['noclose','ماقفلش المتابعة'],['tlate','تأخير إرسال']].map(([t,nm])=>{const k=AL.filter(l=>l.type===t).length;return k?k+' '+nm:''}).filter(Boolean).join(' · ')}${ag?.ov?(ag.ov.off?' · اتلغى':' · اتعدّل'):''}</span></summary><div class="small muted">${AL.map(l=>`${l.type==='absence'?(l.s==='leave'?'إجازة':'غياب'):l.type==='late'?'تأخير':l.type==='noclose'?'ماقفلش':'تأخير إرسال'} ${l.date?l.date.slice(8)+'/'+l.date.slice(5,7):''}${l.t?' ('+l.t+')':''}`).join(' · ')}</div></details></td><td></td><td class="num minus">${AL.reduce((a,l)=>a+l.amt,0)<-0.5?'−'+money(-AL.reduce((a,l)=>a+l.amt,0)):'—'}</td><td class="num minus">${AL.reduce((a,l)=>a+l.amt,0)<-0.5?'−'+money(-AL.reduce((a,l)=>a+l.amt,0)):'0'}</td></tr>`:'';
+   const G=groupLines(p.lines,C),PS=paySum(C,id),grows=PS.groups.map(x=>{const d=dedAmt(x);return `<tr><td><b>${h(x.acc)}</b><div class="small muted">${h([...new Set(x.roles)].join(' · '))}</div></td><td class="num">${money(x.full)}</td><td class="num minus">${d>0.5?`<button class="linkbtn num minus" data-act="dedOpen" data-id="${id}" style="text-decoration:underline">−${money(d)}</button>`:'—'}</td><td class="num">${money(x.net)}</td></tr>`}).join('');
+   const AL=G.rest.filter(l=>ATT_T.includes(l.type)),ag=C.DG?.[id]?.att,arow=PS.att?`<tr><td><b>الغياب والتأخير</b></td><td></td><td class="num minus">${-PS.att.net>0.5?`<button class="linkbtn num minus" data-act="dedOpen" data-id="${id}" style="text-decoration:underline">−${money(-PS.att.net)}</button>`:'—'}</td><td class="num minus">${-PS.att.net>0.5?'−'+money(-PS.att.net):'0'}</td></tr>`:'',arowOld=AL.length?`<tr><td><details><summary><b>الغياب والتأخير</b> <span class="small muted">${[['absence','غياب/إجازة'],['late','تأخير'],['noclose','ماقفلش المتابعة'],['tlate','تأخير إرسال']].map(([t,nm])=>{const k=AL.filter(l=>l.type===t).length;return k?k+' '+nm:''}).filter(Boolean).join(' · ')}${ag?.ov?(ag.ov.off?' · اتلغى':' · اتعدّل'):''}</span></summary><div class="small muted">${AL.map(l=>`${l.type==='absence'?(l.s==='leave'?'إجازة':'غياب'):l.type==='late'?'تأخير':l.type==='noclose'?'ماقفلش':'تأخير إرسال'} ${l.date?l.date.slice(8)+'/'+l.date.slice(5,7):''}${l.t?' ('+l.t+')':''}`).join(' · ')}</div></details></td><td></td><td class="num minus">${AL.reduce((a,l)=>a+l.amt,0)<-0.5?'−'+money(-AL.reduce((a,l)=>a+l.amt,0)):'—'}</td><td class="num minus">${AL.reduce((a,l)=>a+l.amt,0)<-0.5?'−'+money(-AL.reduce((a,l)=>a+l.amt,0)):'0'}</td></tr>`:'';
    const rows=grows+arow+G.rest.filter(l=>!ATT_T.includes(l.type)).map(l=>{
      if(l.type==='daily')return `<tr><td>${h(l.what)}</td><td class="num">${money(l.share)}</td><td>—</td><td class="num">${money(l.amt)}</td></tr>`;
      if(l.type==='sumadj')return `<tr><td>${h(l.what)}</td><td></td><td class="num ${l.amt<0?'minus':''}">${l.amt<0?'−'+money(-l.amt):'—'}</td><td class="num ${l.amt<0?'minus':'plus'}">${l.amt<0?'−':'+'}${money(Math.abs(l.amt))}</td></tr>`;
@@ -2233,6 +2234,13 @@ function vPay(){
     <tr><td colspan="3"><b>المرتب</b></td><td class="num"><b>${money(p.total)}</b></td></tr></tbody></table></div><div class="row" style="margin-top:10px"><button class="btn primary sm" data-act="slip" data-id="${id}">قسيمة المرتب وإرسالها</button><button class="btn sm" data-act="payAdj" data-id="${id}">✏️ تعديل المرتب</button></div></details>`}).join(''):`<div class="panel empty"><h3>مفيش مرتبات تتحسب لسه</h3><p>سجّل أكونتات الشهر والفريق اللي شغال عليها.</p></div>`}
   </div>`;
 }
+function sheetDed(id){const C=compute(),PS=paySum(C,id),e=emp(id),PA=S.payAdj||{},show=!!(PA.show||{})[id];const ALL=[...PS.groups,...(PS.att?[PS.att]:[])];S.edit={kind:'ded',id,rows:[]};
+  const chip=(g,x)=>{const i=S.edit.rows.push({g:g.key,x})-1,off=x.n===0;return `<span class="chip ${off?'':'on'}" style="display:inline-flex;align-items:center;gap:4px;${off?'opacity:.5;text-decoration:line-through':''}"><input id="dn_${i}" type="number" min="0" value="${x.n}" style="width:46px;padding:2px 4px" aria-label="العدد"> ${DED_N[x.type]||x.type} <button class="x" data-act="dedX" data-i="${i}" aria-label="شيل الخصم" style="width:20px;height:20px;font-size:11px">❌</button></span>`};
+  openSheet(`<div class="sheet-h"><div><h3>خصومات ${h(e?.name||'')}</h3><div class="small muted">${mName(S.month)}</div></div><button class="x" data-act="close" aria-label="قفل">×</button></div><div class="stack">
+   ${ALL.map(g=>{const L=Object.values(g.items);return L.length?`<div class="en-row"><div class="row between"><b>${h(g.acc)}</b><span class="num minus">−${money(g.key==='att'?-g.net:dedAmt(g))}</span></div><div class="chips" style="margin-top:6px">${L.map(x=>chip(g,x)).join(' ')}</div></div>`:''}).join('')||'<p class="small muted">مفيش خصومات.</p>'}
+   <p class="small muted" style="margin:0">غيّر الرقم عشان تعدّل الخصم، أو دوس ❌ عشان تلغيه.</p>
+   <label class="row" style="gap:8px;align-items:center"><input type="checkbox" id="ded_show" ${show?'checked':''} style="width:auto"> إظهار تفاصيل الخصومات والتعديلات للموظف في قسيمة المرتب</label>
+   <button class="btn primary" data-act="dedSave" style="justify-content:center">حفظ</button></div>`)}
 function sheetPayAdj(id){const e=emp(id),C=compute(),p=C.P[id]||{lines:[],total:0,raw:0},PA=S.payAdj||{};
   S.edit={kind:'padj',id,L:S.edit?.kind==='padj'&&S.edit.id===id?S.edit.L:JSON.parse(JSON.stringify(PA.adj?.[id]||[]))};const L=S.edit.L;
   const ded=p.lines.filter(l=>l.amt<-0.5&&!l.man);const dd=d=>d?d.slice(8)+'/'+d.slice(5,7):'';
@@ -2488,19 +2496,36 @@ async function drawDocPdf(spec,fname){
 function accLabel(l,C){if(l.type==='deliv')return `كريتور ${l.kind} (${l.n} من ${l.target})`;if(l.type==='design')return `ديزاين (${l.n} من ${l.target||C?.tgt||8})`;return String(l.what||'').replace(' · '+l.acc,'').replace(l.acc+' · ','')}
 const accFull=l=>(l.type==='deliv'||l.type==='design')?(l.tot?l.share*l.n/l.tot:l.share):l.amt;
 const ATT_T=['absence','late','noclose','tlate'];
+// ملخص المرتب: سطر لكل أكونت وسطر للغياب والتأخير، وكل خصم بعدده
+const DED_N={absence:'غياب',late:'تأخير',noclose:'ماقفلش المتابعة',tlate:'تأخير إرسال',story:'ستوري',report:'تقرير',plan:'خطة',short_cr:'بوست',short_dz:'ديزاين',short_xt:'فيديو'};
+function paySum(C,id){const p=C.P[id];if(!p)return{groups:[],att:null};const PA=S.payAdj||{},G={},att={key:'att',acc:'الغياب والتأخير',full:0,net:0,items:{}};
+  const it=(g,type,n,amt,ok,orig)=>{const x=(g.items[type]??={type,n:0,amt:0,ok,orig:0});x.n+=n;x.amt+=amt;x.orig+=orig??amt};
+  const seen=new Set();
+  for(const l of p.lines){if(l.type==='cover'||l.man)continue;
+    if(ATT_T.includes(l.type)&&!l.acc){att.net+=l.amt;const o=PA.dedI?.[id]?.['att|'+l.type];it(att,l.type,o?.off?0:1,-l.amt,'att|'+l.type,-(l.orig??l.amt));continue}
+    if(!l.acc)continue;const g=(G[l.acc]??={key:'acc:'+l.acc,acc:l.acc,full:0,net:0,items:{},roles:[]});g.net+=l.amt;
+    if(l.type==='deliv'||l.type==='design'||l.type==='xt'){const full=l.type==='xt'?l.share:accFull(l);g.full+=full;const tgt=l.type==='design'?(l.target||C.tgt):l.target,done=l.type==='xt'?l.n:l.tot;g.roles.push(l.type==='deliv'?`كريتور ${l.n} من ${tgt} بوست`:l.type==='design'?`ديزاين ${l.n} من ${tgt}`:`مونتاج ${l.n} من ${tgt||'—'}`);
+      const sk=l.type+'|'+(l.cid||l.acc);if(!seen.has(sk)&&tgt&&done<tgt){seen.add(sk);const t=l.type==='deliv'?'short_cr':l.type==='design'?'short_dz':'short_xt',ck=(t==='short_cr'?'cr|':t==='short_dz'?'dz|':'ed|')+(l.cid||'');it(g,t,tgt-done,Math.max(0,full-l.amt),'cnt:'+ck+':'+tgt)}continue}
+    if(l.amt<0||(l.orig??0)<0){const o=PA.dedI?.[id]?.['acc:'+l.acc+'|'+l.type];it(g,l.type,o?.off?0:1,-l.amt,'acc:'+l.acc+'|'+l.type,-(l.orig??l.amt));continue}
+    g.full+=l.amt;if(l.what)g.roles.push(accLabel(l,C))}
+  for(const g of Object.values(G)){for(const[t,x]of Object.entries(g.items)){const o=PA.dedI?.[id]?.[g.key+'|'+t];if(o&&!o.off&&o.n!=null)x.n=+o.n}}
+  for(const[t,x]of Object.entries(att.items)){const o=PA.dedI?.[id]?.['att|'+t];if(o&&!o.off&&o.n!=null)x.n=+o.n}
+  return{groups:Object.values(G),att:Object.keys(att.items).length?att:null}}
+const dedTxt=g=>Object.values(g.items).filter(x=>x.n>0&&x.amt>0.5).map(x=>`${x.n} ${DED_N[x.type]||x.type}`).join(' · ');
+const dedAmt=g=>Math.max(0,g.full-g.net);
 const dedKey=l=>ATT_T.includes(l.type)?'att':l.acc?'acc:'+l.acc:null;
 const dedLabel=k=>k==='att'?'الغياب والتأخير':'خصومات · '+k.slice(4);
 function groupLines(lines,C){const g={},rest=[];for(const l of lines){if(l.type==='cover')continue;if(l.acc){const x=(g[l.acc]??={acc:l.acc,amt:0,full:0,parts:[]});x.amt+=l.amt;x.full+=accFull(l);x.parts.push({label:accLabel(l,C),amt:l.amt})}else rest.push(l)}return{groups:Object.values(g),rest}}
 function slipRows(C,id){
   const p=C.P[id];if(!p)return[];const rows=[],cov={};const dd=d=>d.slice(8)+'/'+d.slice(5,7);
-  groupLines(p.lines,C).groups.forEach(x=>rows.push({t:x.acc,a:x.amt}));
-  {const AL=p.lines.filter(l=>!l.acc&&ATT_T.includes(l.type)),t=AL.reduce((a,l)=>a+l.amt,0);if(AL.length&&Math.abs(t)>0.5)rows.push({t:`الغياب والتأخير (${AL.length})`,a:t})}
+  const PS=paySum(C,id),show=!!(S.payAdj?.show||{})[id];PS.groups.forEach(x=>{const dt=dedTxt(x);rows.push({t:x.acc+(show&&dt?` (خصم: ${dt})`:''),a:x.net})});
+  if(PS.att&&Math.abs(PS.att.net)>0.5)rows.push({t:show?`الغياب والتأخير (${dedTxt(PS.att)})`:'خصومات',a:PS.att.net});
   for(const l of p.lines){if(l.acc||ATT_T.includes(l.type))continue;
     if(l.type==='cover'){const k=l.from;(cov[k]??={n:0,amt:0,from:l.from});cov[k].n++;cov[k].amt+=l.amt;continue}
     if(l.type==='design'){rows.push({t:`تصميم · ${l.client} (${l.n} من ${l.target||C.tgt})`,a:l.amt});continue}
     if(l.type==='deliv'){rows.push({t:`${l.kind} · ${l.client} (${l.n} من ${l.target})`,a:l.amt});continue}
     if(l.type==='absence'){rows.push({t:`${l.s==='leave'?'إجازة':'غياب'} يوم ${dd(l.date)}`,a:l.amt});continue}
-    if(l.type==='sumadj'){rows.push({t:l.what,a:l.amt});continue}
+    if(l.type==='sumadj'){if(l.man&&!(S.payAdj?.show||{})[id]){(rows.find(r=>r.k==='adj')||rows[rows.push({t:'تعديلات',a:0,k:'adj'})-1]).a+=l.amt;continue}rows.push({t:l.what,a:l.amt});continue}
     if(l.type==='noclose'){rows.push({t:`ماقفلش المتابعة يوم ${dd(l.date)}`,a:l.amt});continue}
     if(l.type==='late'){rows.push({t:`تأخير يوم ${dd(l.date)} (${l.t})`,a:l.amt});continue}
     rows.push({t:l.what,a:l.amt});
@@ -2688,12 +2713,18 @@ document.addEventListener('click',async e=>{
     const ok=await save(()=>db.doc('checkins/'+S.me.id).set({empId:S.me.id,log:{[d]:{[k]:firebase.firestore.FieldValue.serverTimestamp()}}},{merge:true}),k==='in'?'اتسجّل حضورك':'اتسجّل انصرافك');if(!ok)b.disabled=false;return}
   if(a==='seedTeam'){b.disabled=true;const bt=db.batch();SEED.forEach(([id,name,roles])=>bt.set(db.doc('employees/'+id),{name,roles,role:roles[0],phone:'',email:''}));bt.set(db.doc('fin/main'),{photoPartner:'abdo-adel'},{merge:true});if(!await save(()=>bt.commit(),'الفريق اتضاف'))b.disabled=false;return}
   if(a==='slip')return sheetSlip(b.dataset.id);
+  if(a==='dedOpen')return sheetDed(b.dataset.id);
+  if(a==='dedX'){const el=document.getElementById('dn_'+b.dataset.i);if(el){el.value=0;el.closest('.chip').style.opacity='.5';el.closest('.chip').style.textDecoration='line-through'}return}
+  if(a==='dedSave'){const E=S.edit,id=E.id,PA=JSON.parse(JSON.stringify(S.payAdj||{}));PA.dedI??={};PA.cnt??={};PA.show??={};const DI={...(PA.dedI[id]||{})},CNx={...(PA.cnt[id]||{})};
+    E.rows.forEach((r,i)=>{const nv=+v('dn_'+i),x=r.x;if(isNaN(nv)||nv===x.n)return;if(String(x.ok).startsWith('cnt:')){const[,ck,tg]=x.ok.split(':');CNx[ck]=Math.max(0,+tg-nv)}else DI[x.ok]=nv===0?{off:1}:{n:nv}});
+    PA.dedI[id]=DI;PA.cnt[id]=CNx;PA.show[id]=!!document.getElementById('ded_show')?.checked;b.disabled=true;
+    if(await save(()=>db.doc('fin/main/payadj/'+S.month).set({adj:PA.adj||{},fix:PA.fix||{},cnt:PA.cnt,ded:PA.ded||{},dedI:PA.dedI,show:PA.show}),'الخصومات اتعدّلت ✓')){S.payAdj=PA;closeSheet()}else b.disabled=false;return}
   if(a==='payAdj'){S.edit=null;return sheetPayAdj(b.dataset.id)}
   if(a==='paAdd'){paRead();S.edit.L.push({d:b.dataset.d||'',a:(b.dataset.s==='-'?-1:1)*(+b.dataset.a||0)});sheetPayAdj(S.edit.id);setTimeout(()=>document.getElementById('pa_a_'+(S.edit.L.length-1))?.focus(),30);return}
   if(a==='paRm'){paRead();S.edit.L.splice(+b.dataset.i,1);sheetPayAdj(S.edit.id);return}
   if(a==='paSave'){paRead();const id=S.edit.id,L=S.edit.L.filter(x=>+x.a),fx=v('pa_fix'),PA=JSON.parse(JSON.stringify(S.payAdj||{}));PA.cnt??={};PA.ded??={};{const cn={};(S.edit.cnK||[]).forEach((k,i)=>{const x=v('pc_'+i);if(x!=='')cn[k]=+x});if(Object.keys(cn).length)PA.cnt[id]=cn;else delete PA.cnt[id];const dd={};(S.edit.dgK||[]).forEach((k,i)=>{if(document.getElementById('pdo_'+i)?.checked)dd[k]={off:1};else{const x=v('pdg_'+i);if(x!=='')dd[k]={a:+x}}});if(Object.keys(dd).length)PA.ded[id]=dd;else delete PA.ded[id]}PA.adj??={};PA.fix??={};
     if(L.length)PA.adj[id]=L;else delete PA.adj[id];if(fx!=='')PA.fix[id]=+fx;else delete PA.fix[id];
-    if(await save(()=>db.doc('fin/main/payadj/'+S.month).set({adj:PA.adj,fix:PA.fix,cnt:PA.cnt,ded:PA.ded}),'المرتب اتعدّل ✓')){S.payAdj=PA;closeSheet()}return}
+    if(await save(()=>db.doc('fin/main/payadj/'+S.month).set({adj:PA.adj,fix:PA.fix,cnt:PA.cnt,ded:PA.ded,dedI:PA.dedI||{},show:PA.show||{}}),'المرتب اتعدّل ✓')){S.payAdj=PA;closeSheet()}return}
   if(a==='pdfSlip'){b.disabled=true;const t=b.textContent;b.textContent='بيجهّز الـ PDF…';const e=emp(b.dataset.id);try{await invPdf(null,'slipPaper',`مرتب ${e.name} ${mName(S.month)}.pdf`)}catch(x){console.warn(x);toast('اختار «حفظ كـ PDF» من شاشة الطباعة');setTimeout(()=>window.print(),300)}b.disabled=false;b.textContent=t;return}
   if(a==='slipPaid'){const id=b.dataset.id,vv=b.dataset.v,C=compute(),via={vf:'فودافون كاش',ip:'انستا باي',cash:'كاش'}[vv]||'';
     const doc=vv==='0'?{month:S.month,emp:id,paid:false}:{month:S.month,emp:id,paid:true,paidAt:today(),via,amount:C.P[id]?.total||0};
